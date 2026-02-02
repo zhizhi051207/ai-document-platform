@@ -1,13 +1,13 @@
 import base64
 import io
 import json
+import math
 import re
+from collections import Counter
 from http.server import BaseHTTPRequestHandler
 
 import pdfplumber
 from docx import Document
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from snownlp import SnowNLP
 
 
@@ -23,6 +23,47 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
     return file_bytes.decode("utf-8", errors="ignore")
 
 
+def tokenize(text: str):
+    tokens = re.findall(r"[A-Za-z]+|[\u4e00-\u9fff]+", text.lower())
+    cleaned = [token for token in tokens if len(token) > 1]
+    return cleaned
+
+
+def compute_tfidf(doc_tokens):
+    doc_count = len(doc_tokens)
+    df = Counter()
+    for tokens in doc_tokens:
+        df.update(set(tokens))
+
+    tfidf_docs = []
+    for tokens in doc_tokens:
+        tf = Counter(tokens)
+        tfidf = {}
+        for term, freq in tf.items():
+            idf = math.log((doc_count + 1) / (df[term] + 1)) + 1
+            tfidf[term] = freq * idf
+        tfidf_docs.append(tfidf)
+    return tfidf_docs
+
+
+def summarize(text: str, max_sentences: int = 3):
+    sentences = re.split(r"[。！？.!?]\s*", text)
+    sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
+    if not sentences:
+        return "暂无摘要"
+    tokenized = [tokenize(sentence) for sentence in sentences]
+    word_freq = Counter([token for sent in tokenized for token in sent])
+    scores = []
+    for sentence, tokens in zip(sentences, tokenized):
+        if not tokens:
+            continue
+        score = sum(word_freq[token] for token in tokens) / len(tokens)
+        scores.append((sentence, score))
+    ranked = sorted(scores, key=lambda x: x[1], reverse=True)
+    selected = [sent for sent, _ in ranked[:max_sentences]]
+    return "。".join(selected) + "。"
+
+
 def split_sections(text: str):
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     sections = []
@@ -33,9 +74,10 @@ def split_sections(text: str):
     for line in lines:
         if heading_pattern.match(line):
             if current_content:
+                joined = " ".join(current_content)
                 sections.append({
                     "title": current_title,
-                    "content": " ".join(current_content)[:180] + ("..." if len(" ".join(current_content)) > 180 else ""),
+                    "content": joined[:180] + ("..." if len(joined) > 180 else ""),
                 })
             current_title = line
             current_content = []
@@ -43,42 +85,33 @@ def split_sections(text: str):
             current_content.append(line)
 
     if current_content:
+        joined = " ".join(current_content)
         sections.append({
             "title": current_title,
-            "content": " ".join(current_content)[:180] + ("..." if len(" ".join(current_content)) > 180 else ""),
+            "content": joined[:180] + ("..." if len(joined) > 180 else ""),
         })
 
     return sections
 
 
 def extract_keywords(text: str, top_k: int = 8):
-    vectorizer = TfidfVectorizer(max_features=2000, stop_words=None)
-    tfidf = vectorizer.fit_transform([text])
-    scores = tfidf.toarray()[0]
-    terms = vectorizer.get_feature_names_out()
-    ranked = sorted(zip(terms, scores), key=lambda x: x[1], reverse=True)
-    return [{"term": term, "score": round(score, 4)} for term, score in ranked[:top_k]]
-
-
-def summarize(text: str, max_sentences: int = 3):
-    sentences = re.split(r"[。！？.!?]\s*", text)
-    sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
-    if not sentences:
-        return "暂无摘要"
-    vectorizer = TfidfVectorizer()
-    tfidf = vectorizer.fit_transform(sentences)
-    scores = tfidf.sum(axis=1).A1
-    ranked = sorted(zip(sentences, scores), key=lambda x: x[1], reverse=True)
-    selected = [sent for sent, _ in ranked[:max_sentences]]
-    return "。".join(selected) + "。"
+    tokens = tokenize(text)
+    if not tokens:
+        return []
+    tf = Counter(tokens)
+    total = sum(tf.values())
+    ranked = sorted(tf.items(), key=lambda x: x[1], reverse=True)
+    keywords = []
+    for term, freq in ranked[:top_k]:
+        keywords.append({"term": term, "score": round(freq / total, 4)})
+    return keywords
 
 
 def extract_conclusions(text: str, sections):
     for section in sections:
         if "结论" in section["title"] or "conclusion" in section["title"].lower():
-            return re.split(r"[。！？.!?]\s*", section["content"])[:3]
-    sentences = re.split(r"[。！？.!?]\s*", text)
-    sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
+            return [s for s in re.split(r"[。！？.!?]\s*", section["content"]) if s][:3]
+    sentences = [s.strip() for s in re.split(r"[。！？.!?]\s*", text) if len(s.strip()) > 10]
     return sentences[-3:] if len(sentences) >= 3 else sentences
 
 
@@ -96,6 +129,43 @@ def build_conclusion_graph(keywords, text):
                 edges.append({"source": source, "target": target, "weight": weight})
     edges = sorted(edges, key=lambda x: x["weight"], reverse=True)[:12]
     return {"nodes": nodes, "edges": edges}
+
+
+def cosine_similarity(vec_a, vec_b):
+    intersection = set(vec_a.keys()) | set(vec_b.keys())
+    numerator = sum(vec_a.get(term, 0) * vec_b.get(term, 0) for term in intersection)
+    denom_a = math.sqrt(sum(value * value for value in vec_a.values()))
+    denom_b = math.sqrt(sum(value * value for value in vec_b.values()))
+    if denom_a == 0 or denom_b == 0:
+        return 0.0
+    return numerator / (denom_a * denom_b)
+
+
+def compare_documents(documents):
+    texts = [doc["full_text"] for doc in documents]
+    if not texts:
+        return {"similarity": [], "overlap_keywords": [], "unique_keywords": {}}
+
+    tokenized_docs = [tokenize(text) for text in texts]
+    tfidf_docs = compute_tfidf(tokenized_docs)
+
+    sim_matrix = []
+    for vec_a in tfidf_docs:
+        row = [round(cosine_similarity(vec_a, vec_b), 4) for vec_b in tfidf_docs]
+        sim_matrix.append(row)
+
+    keyword_sets = [set([k["term"] for k in doc["keywords"]]) for doc in documents]
+    overlap = set.intersection(*keyword_sets) if len(keyword_sets) > 1 else keyword_sets[0]
+    unique = {}
+    for idx, doc in enumerate(documents):
+        others = set().union(*[s for i, s in enumerate(keyword_sets) if i != idx])
+        unique[doc["name"]] = list(keyword_sets[idx] - others)
+
+    return {
+        "similarity": sim_matrix,
+        "overlap_keywords": list(overlap) if overlap else [],
+        "unique_keywords": unique,
+    }
 
 
 def detect_conflicts(documents):
@@ -126,28 +196,6 @@ def detect_conflicts(documents):
                 "sentiment_b": sentiment_b,
             })
     return conflicts
-
-
-def compare_documents(documents):
-    texts = [doc["full_text"] for doc in documents]
-    if not texts:
-        return {"similarity": [], "overlap_keywords": [], "unique_keywords": {}}
-    vectorizer = TfidfVectorizer(max_features=3000)
-    tfidf = vectorizer.fit_transform(texts)
-    sim_matrix = cosine_similarity(tfidf).tolist()
-
-    keyword_sets = [set([k["term"] for k in doc["keywords"]]) for doc in documents]
-    overlap = set.intersection(*keyword_sets) if len(keyword_sets) > 1 else keyword_sets[0]
-    unique = {}
-    for idx, doc in enumerate(documents):
-        others = set().union(*[s for i, s in enumerate(keyword_sets) if i != idx])
-        unique[doc["name"]] = list(keyword_sets[idx] - others)
-
-    return {
-        "similarity": sim_matrix,
-        "overlap_keywords": list(overlap) if overlap else [],
-        "unique_keywords": unique,
-    }
 
 
 def build_response(payload):
