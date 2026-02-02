@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "builds": [
+    { "src": "api/analyze.py", "use": "@vercel/python" },
+    { "src": "package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
+  ],
+  "routes": [
+    { "src": "/api/analyze", "dest": "/api/analyze.py" },
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}
