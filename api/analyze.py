@@ -3,12 +3,22 @@ import io
 import json
 import math
 import re
+import unicodedata
 from collections import Counter
 from http.server import BaseHTTPRequestHandler
 
 import pdfplumber
 from docx import Document
 from snownlp import SnowNLP
+
+
+def normalize_text(text: str) -> str:
+    if not text:
+        return ""
+    normalized = unicodedata.normalize("NFKC", text)
+    normalized = normalized.replace("\u3000", " ")
+    normalized = re.sub(r"\s+", " ", normalized)
+    return normalized.strip()
 
 
 def extract_text(file_bytes: bytes, filename: str) -> str:
@@ -74,9 +84,9 @@ def split_sections(text: str):
     for line in lines:
         if heading_pattern.match(line):
             if current_content:
-                joined = " ".join(current_content)
+                joined = normalize_text(" ".join(current_content))
                 sections.append({
-                    "title": current_title,
+                    "title": normalize_text(current_title) or current_title,
                     "content": joined[:180] + ("..." if len(joined) > 180 else ""),
                 })
             current_title = line
@@ -85,9 +95,9 @@ def split_sections(text: str):
             current_content.append(line)
 
     if current_content:
-        joined = " ".join(current_content)
+        joined = normalize_text(" ".join(current_content))
         sections.append({
-            "title": current_title,
+            "title": normalize_text(current_title) or current_title,
             "content": joined[:180] + ("..." if len(joined) > 180 else ""),
         })
 
@@ -202,12 +212,16 @@ def build_response(payload):
     documents = []
     for file in payload.get("files", []):
         file_bytes = base64.b64decode(file["base64"])
-        text = extract_text(file_bytes, file["name"]) or ""
-        text = re.sub(r"\s+", " ", text)
+        raw_text = extract_text(file_bytes, file["name"]) or ""
+        text = normalize_text(raw_text)
         sections = split_sections(text)
         keywords = extract_keywords(text)
-        summary = summarize(text)
-        conclusions = extract_conclusions(text, sections)
+        summary = normalize_text(summarize(text))
+        conclusions = [
+            normalize_text(item)
+            for item in extract_conclusions(text, sections)
+            if normalize_text(item)
+        ]
         documents.append({
             "name": file["name"],
             "word_count": len(text),
