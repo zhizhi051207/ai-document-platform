@@ -75,11 +75,15 @@ def summarize(text: str, max_sentences: int = 3):
 
 
 def split_sections(text: str):
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    lines = [normalize_text(line) for line in text.splitlines()]
+    lines = [line for line in lines if line]
     sections = []
     current_title = "概览"
     current_content = []
-    heading_pattern = re.compile(r"^(\d+(?:\.\d+)*\s+.+|第.+章|摘要|结论|Conclusion|Abstract)$", re.I)
+    heading_pattern = re.compile(
+        r"^(\d+(?:\.\d+)*[\s、.].+|[一二三四五六七八九十]+[、.].+|第.+章|摘要|结论|Conclusion|Abstract)$",
+        re.I,
+    )
 
     for line in lines:
         if heading_pattern.match(line):
@@ -87,7 +91,7 @@ def split_sections(text: str):
                 joined = normalize_text(" ".join(current_content))
                 sections.append({
                     "title": normalize_text(current_title) or current_title,
-                    "content": joined[:360] + ("..." if len(joined) > 360 else ""),
+                    "content": joined,
                 })
             current_title = line
             current_content = []
@@ -98,13 +102,22 @@ def split_sections(text: str):
         joined = normalize_text(" ".join(current_content))
         sections.append({
             "title": normalize_text(current_title) or current_title,
-            "content": joined[:360] + ("..." if len(joined) > 360 else ""),
+            "content": joined,
         })
 
     return sections
 
 
-def extract_keywords(text: str, top_k: int = 8):
+def build_section_thinking(title: str, summary: str, keywords):
+    keyword_text = "、".join([item["term"] for item in keywords[:3]])
+    if summary == "暂无摘要":
+        return "本节暂无足够的句子生成思路分析。"
+    if keyword_text:
+        return f"本节围绕{keyword_text}展开，核心观点是：{summary}"
+    return f"本节核心观点是：{summary}"
+
+
+def extract_keywords(text: str, top_k: int = 12):
     tokens = tokenize(text)
     if not tokens:
         return []
@@ -214,12 +227,25 @@ def build_response(payload):
         file_bytes = base64.b64decode(file["base64"])
         raw_text = extract_text(file_bytes, file["name"]) or ""
         text = normalize_text(raw_text)
-        sections = split_sections(text)
+        sections_raw = split_sections(raw_text)
+        sections = []
+        for section in sections_raw:
+            content = section["content"]
+            summary = normalize_text(summarize(content, max_sentences=2))
+            keywords = extract_keywords(content, top_k=8)
+            excerpt = content[:320] + ("..." if len(content) > 320 else "")
+            sections.append({
+                "title": section["title"],
+                "excerpt": excerpt,
+                "summary": summary,
+                "keywords": keywords,
+                "thinking": build_section_thinking(section["title"], summary, keywords),
+            })
         keywords = extract_keywords(text)
         summary = normalize_text(summarize(text))
         conclusions = [
             normalize_text(item)
-            for item in extract_conclusions(text, sections)
+            for item in extract_conclusions(text, sections_raw)
             if normalize_text(item)
         ]
         documents.append({

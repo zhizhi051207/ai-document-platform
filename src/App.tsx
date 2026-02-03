@@ -32,7 +32,10 @@ type UploadFile = {
 
 type Section = {
   title: string
-  content: string
+  excerpt: string
+  summary: string
+  thinking: string
+  keywords: { term: string; score: number }[]
 }
 
 type DocumentResult = {
@@ -89,7 +92,7 @@ function App() {
       (sum, doc) => sum + doc.sections.length,
       0
     )
-    const topKeywords = result.keyword_chart.slice(0, 8)
+    const topKeywords = result.keyword_chart.slice(0, 12)
     const overlapCount = result.comparison.overlap_keywords.length
     const conflictCount = result.conflicts.length
     return {
@@ -384,29 +387,51 @@ function App() {
                       <Card key={doc.name} className="border-slate-800 bg-slate-950/40">
                         <CardHeader>
                           <CardTitle className="text-base">{doc.name} - 章节结构</CardTitle>
-                          <CardDescription>自动识别章节标题与摘要</CardDescription>
+                          <CardDescription>分结构拆解 + 思路分析</CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <Table>
-                            <TableHeader>
-                              <TableRow>
-                                <TableHead>章节</TableHead>
-                                <TableHead>内容摘要</TableHead>
-                              </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                              {doc.sections.map((section) => (
-                                <TableRow key={section.title}>
-                                  <TableCell className="font-medium text-slate-100">
-                                    {section.title}
-                                  </TableCell>
-                                  <TableCell className="text-slate-300">
-                                    {section.content}
-                                  </TableCell>
-                                </TableRow>
+                          <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
+                            <div className="space-y-3 text-sm text-slate-300">
+                              <p className="text-xs text-slate-500">结构目录</p>
+                              {doc.sections.map((section, index) => (
+                                <div key={section.title} className="flex items-center gap-2">
+                                  <Badge className="bg-slate-800 text-slate-200">{index + 1}</Badge>
+                                  <span>{section.title}</span>
+                                </div>
                               ))}
-                            </TableBody>
-                          </Table>
+                            </div>
+                            <div className="space-y-4">
+                              {doc.sections.map((section) => (
+                                <Card key={section.title} className="border-slate-800 bg-slate-900/40">
+                                  <CardHeader>
+                                    <CardTitle className="text-sm">{section.title}</CardTitle>
+                                    <CardDescription>章节摘要与关键词</CardDescription>
+                                  </CardHeader>
+                                  <CardContent className="space-y-3 text-sm text-slate-300">
+                                    <div>
+                                      <p className="text-xs text-slate-500">内容摘录</p>
+                                      <p>{section.excerpt}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs text-slate-500">结构摘要</p>
+                                      <p>{section.summary}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-xs text-slate-500">思路分析</p>
+                                      <p>{section.thinking}</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                      {section.keywords.map((item) => (
+                                        <Badge key={item.term} className="bg-slate-800 text-slate-200">
+                                          {item.term}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              ))}
+                            </div>
+                          </div>
                         </CardContent>
                       </Card>
                     ))}
