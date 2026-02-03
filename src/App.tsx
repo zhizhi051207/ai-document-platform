@@ -66,15 +66,42 @@ type AnalysisResult = {
 
 function App() {
   const [files, setFiles] = useState<UploadFile[]>([])
-  const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<AnalysisResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [notes, setNotes] = useState("")
 
   const totalSize = useMemo(
     () => files.reduce((sum, file) => sum + file.size, 0),
     [files]
   )
+
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState<AnalysisResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [notes, setNotes] = useState("")
+
+  const overview = useMemo(() => {
+    if (!result) return null
+    const docCount = result.documents.length
+    const totalWords = result.documents.reduce(
+      (sum, doc) => sum + doc.word_count,
+      0
+    )
+    const avgWords = docCount ? Math.round(totalWords / docCount) : 0
+    const sectionCount = result.documents.reduce(
+      (sum, doc) => sum + doc.sections.length,
+      0
+    )
+    const topKeywords = result.keyword_chart.slice(0, 8)
+    const overlapCount = result.comparison.overlap_keywords.length
+    const conflictCount = result.conflicts.length
+    return {
+      docCount,
+      totalWords,
+      avgWords,
+      sectionCount,
+      topKeywords,
+      overlapCount,
+      conflictCount,
+    }
+  }, [result])
 
   const handleFiles = async (fileList: FileList | null) => {
     if (!fileList) return
@@ -226,69 +253,195 @@ function App() {
                   <p className="text-xs">支持研究结论图、文献对比、观点冲突检测。</p>
                 </div>
               ) : (
-                <Tabs defaultValue="knowledge" className="space-y-4">
-                  <TabsList className="grid w-full grid-cols-4 bg-slate-950/70">
-                    <TabsTrigger value="knowledge">结构化知识</TabsTrigger>
+                <Tabs defaultValue="overview" className="space-y-4">
+                  <TabsList className="flex flex-wrap gap-2 bg-slate-950/70">
+                    <TabsTrigger value="overview">总览</TabsTrigger>
+                    <TabsTrigger value="summary">摘要</TabsTrigger>
+                    <TabsTrigger value="conclusions">结论</TabsTrigger>
+                    <TabsTrigger value="sections">章节</TabsTrigger>
+                    <TabsTrigger value="keywords">关键词</TabsTrigger>
                     <TabsTrigger value="charts">图表</TabsTrigger>
                     <TabsTrigger value="comparison">文献对比</TabsTrigger>
                     <TabsTrigger value="conflict">观点冲突</TabsTrigger>
                   </TabsList>
 
-                  <TabsContent value="knowledge" className="space-y-6">
+                  <TabsContent value="overview" className="space-y-4">
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Card className="border-slate-800 bg-slate-950/40">
+                        <CardHeader>
+                          <CardTitle className="text-base">文档规模</CardTitle>
+                          <CardDescription>整体规模与章节统计</CardDescription>
+                        </CardHeader>
+                        <CardContent className="grid gap-3 text-sm text-slate-300">
+                          <div className="flex items-center justify-between">
+                            <span>文档数量</span>
+                            <span className="text-slate-100">{overview?.docCount ?? 0}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>总字数</span>
+                            <span className="text-slate-100">{overview?.totalWords ?? 0}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>平均字数</span>
+                            <span className="text-slate-100">{overview?.avgWords ?? 0}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>章节数量</span>
+                            <span className="text-slate-100">{overview?.sectionCount ?? 0}</span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-slate-800 bg-slate-950/40">
+                        <CardHeader>
+                          <CardTitle className="text-base">分析备注</CardTitle>
+                          <CardDescription>用户输入的关注点</CardDescription>
+                        </CardHeader>
+                        <CardContent className="text-sm text-slate-300">
+                          {notes.trim() ? notes : "未填写备注"}
+                        </CardContent>
+                      </Card>
+                    </div>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <Card className="border-slate-800 bg-slate-950/40">
+                        <CardHeader>
+                          <CardTitle className="text-base">关键词聚焦</CardTitle>
+                          <CardDescription>高频关键词与研究焦点</CardDescription>
+                        </CardHeader>
+                        <CardContent className="flex flex-wrap gap-2">
+                          {overview?.topKeywords.map((item) => (
+                            <Badge key={item.name} className="bg-indigo-500/20 text-indigo-200">
+                              {item.name}
+                            </Badge>
+                          ))}
+                        </CardContent>
+                      </Card>
+                      <Card className="border-slate-800 bg-slate-950/40">
+                        <CardHeader>
+                          <CardTitle className="text-base">风险提示</CardTitle>
+                          <CardDescription>差异与冲突快速预警</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm text-slate-300">
+                          <div className="flex items-center justify-between">
+                            <span>重叠关键词</span>
+                            <span className="text-slate-100">{overview?.overlapCount ?? 0}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span>冲突条目</span>
+                            <span className="text-slate-100">{overview?.conflictCount ?? 0}</span>
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            冲突条目来源于情感倾向差异，建议重点核对。
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </TabsContent>
+
+                  <TabsContent value="summary" className="space-y-6">
                     {result.documents.map((doc) => (
-                      <div key={doc.name} className="space-y-4">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-semibold text-slate-100">{doc.name}</h3>
-                          <Badge className="bg-slate-800 text-slate-200">
-                            {doc.word_count} 字
-                          </Badge>
-                        </div>
-                        <Card className="border-slate-800 bg-slate-950/40">
-                          <CardHeader>
-                            <CardTitle className="text-base">摘要</CardTitle>
-                          </CardHeader>
-                          <CardContent className="text-sm text-slate-300">
-                            {doc.summary}
-                          </CardContent>
-                        </Card>
-                        <Card className="border-slate-800 bg-slate-950/40">
-                          <CardHeader>
-                            <CardTitle className="text-base">研究结论</CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-2 text-sm text-slate-300">
-                            {doc.conclusions.map((item, index) => (
-                              <p key={index}>• {item}</p>
+                      <Card key={doc.name} className="border-slate-800 bg-slate-950/40">
+                        <CardHeader>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <CardTitle className="text-base">{doc.name}</CardTitle>
+                            <Badge className="bg-slate-800 text-slate-200">
+                              {doc.word_count} 字
+                            </Badge>
+                          </div>
+                          <CardDescription>摘要与关键词速览</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <p className="text-sm text-slate-300">{doc.summary}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {doc.keywords.map((item) => (
+                              <Badge key={item.term} className="bg-slate-800 text-slate-200">
+                                {item.term}
+                              </Badge>
                             ))}
-                          </CardContent>
-                        </Card>
-                        <Card className="border-slate-800 bg-slate-950/40">
-                          <CardHeader>
-                            <CardTitle className="text-base">章节结构</CardTitle>
-                          </CardHeader>
-                          <CardContent>
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead>章节</TableHead>
-                                  <TableHead>内容摘要</TableHead>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </TabsContent>
+
+                  <TabsContent value="conclusions" className="space-y-6">
+                    {result.documents.map((doc) => (
+                      <Card key={doc.name} className="border-slate-800 bg-slate-950/40">
+                        <CardHeader>
+                          <CardTitle className="text-base">{doc.name}</CardTitle>
+                          <CardDescription>研究结论与核心发现</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-2 text-sm text-slate-300">
+                          {doc.conclusions.map((item, index) => (
+                            <p key={index}>• {item}</p>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </TabsContent>
+
+                  <TabsContent value="sections" className="space-y-6">
+                    {result.documents.map((doc) => (
+                      <Card key={doc.name} className="border-slate-800 bg-slate-950/40">
+                        <CardHeader>
+                          <CardTitle className="text-base">{doc.name} - 章节结构</CardTitle>
+                          <CardDescription>自动识别章节标题与摘要</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>章节</TableHead>
+                                <TableHead>内容摘要</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {doc.sections.map((section) => (
+                                <TableRow key={section.title}>
+                                  <TableCell className="font-medium text-slate-100">
+                                    {section.title}
+                                  </TableCell>
+                                  <TableCell className="text-slate-300">
+                                    {section.content}
+                                  </TableCell>
                                 </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {doc.sections.map((section) => (
-                                  <TableRow key={section.title}>
-                                    <TableCell className="font-medium text-slate-100">
-                                      {section.title}
-                                    </TableCell>
-                                    <TableCell className="text-slate-300">
-                                      {section.content}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </CardContent>
-                        </Card>
-                      </div>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </TabsContent>
+
+                  <TabsContent value="keywords" className="space-y-6">
+                    {result.documents.map((doc) => (
+                      <Card key={doc.name} className="border-slate-800 bg-slate-950/40">
+                        <CardHeader>
+                          <CardTitle className="text-base">{doc.name} - 关键词画像</CardTitle>
+                          <CardDescription>关键词频率与权重</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>关键词</TableHead>
+                                <TableHead>权重</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {doc.keywords.map((item) => (
+                                <TableRow key={item.term}>
+                                  <TableCell className="font-medium text-slate-100">
+                                    {item.term}
+                                  </TableCell>
+                                  <TableCell className="text-slate-300">
+                                    {(item.score * 100).toFixed(2)}%
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </CardContent>
+                      </Card>
                     ))}
                   </TabsContent>
 
