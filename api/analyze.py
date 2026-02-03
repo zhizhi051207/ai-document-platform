@@ -74,26 +74,46 @@ def summarize(text: str, max_sentences: int = 3):
     return "。".join(selected) + "。"
 
 
+
+def detect_heading_level(line: str):
+    text = normalize_text(line)
+    if not text:
+        return None
+    specials = {"摘要", "结论", "Abstract", "Conclusion"}
+    if text in specials:
+        return 1
+    if re.match(r"^第[一二三四五六七八九十]+章", text):
+        return 1
+    if re.match(r"^\d+\.\d+\.\d+(?:\s|、|\.|\)|）).+", text):
+        return 3
+    if re.match(r"^\d+\.\d+(?:\s|、|\.|\)|）).+", text):
+        return 2
+    if re.match(r"^\d+(?:\s|、|\.|\)|）).+", text):
+        return 1
+    if re.match(r"^[一二三四五六七八九十]+[、.].+", text):
+        return 1
+    if re.match(r"^[（(][一二三四五六七八九十]+[)）].+", text):
+        return 2
 def split_sections(text: str):
     lines = [normalize_text(line) for line in text.splitlines()]
     lines = [line for line in lines if line]
     sections = []
     current_title = "概览"
+    current_level = 1
     current_content = []
-    heading_pattern = re.compile(
-        r"^(\d+(?:\.\d+)*[\s、.].+|[一二三四五六七八九十]+[、.].+|第.+章|摘要|结论|Conclusion|Abstract)$",
-        re.I,
-    )
 
     for line in lines:
-        if heading_pattern.match(line):
+        level = detect_heading_level(line)
+        if level is not None:
             if current_content:
                 joined = normalize_text(" ".join(current_content))
                 sections.append({
                     "title": normalize_text(current_title) or current_title,
                     "content": joined,
+                    "level": current_level,
                 })
             current_title = line
+            current_level = level
             current_content = []
         else:
             current_content.append(line)
@@ -103,9 +123,17 @@ def split_sections(text: str):
         sections.append({
             "title": normalize_text(current_title) or current_title,
             "content": joined,
+            "level": current_level,
         })
 
     return sections
+
+
+    if re.match(r"^[（(]\d+[)）].+", text):
+        return 2
+    return None
+
+
 
 
 def build_section_thinking(title: str, summary: str, keywords):
@@ -136,6 +164,8 @@ def extract_conclusions(text: str, sections):
             return [s for s in re.split(r"[。！？.!?]\s*", section["content"]) if s][:3]
     sentences = [s.strip() for s in re.split(r"[。！？.!?]\s*", text) if len(s.strip()) > 10]
     return sentences[-3:] if len(sentences) >= 3 else sentences
+
+
 
 
 def build_conclusion_graph(keywords, text):
