@@ -79,24 +79,55 @@ def detect_heading_level(line: str):
     text = normalize_text(line)
     if not text:
         return None
+    if len(text) > 80 and re.search(r"[a-z]", text):
+        return None
+    if text.count(" ") > 8 and re.search(r"[a-z]", text):
+        return None
+    clean = re.sub(r"[，。；:：,]+$", "", text)
     specials = {"摘要", "结论", "Abstract", "Conclusion"}
-    if text in specials:
+    if clean in specials:
         return 1
-    if re.match(r"^第[一二三四五六七八九十]+章", text):
+    if re.match(r"^第[一二三四五六七八九十]+章", clean):
         return 1
-    if re.match(r"^\d+\.\d+\.\d+(?:\s|、|\.|\)|）).+", text):
+    if re.match(r"^\d+\.\d+\.\d+(?:\s|、|\.|\)|）).+", clean):
+        if len(clean) > 80:
+            return None
         return 3
-    if re.match(r"^\d+\.\d+(?:\s|、|\.|\)|）).+", text):
+    if re.match(r"^\d+\.\d+(?:\s|、|\.|\)|）).+", clean):
+        if len(clean) > 60:
+            return None
         return 2
-    if re.match(r"^\d+(?:\s|、|\.|\)|）).+", text):
+    if re.match(r"^\d+(?:\s|、|\.|\)|）).+", clean):
+        if len(clean) > 40:
+            return None
+        if re.search(r"[，。；:：]", clean):
+            return None
+        if re.search(r"\b\d{4}\b", clean) and not re.search(r"(章|节|引言|结语|结果|讨论|摘要)", clean):
+            return None
+        heading_keywords = ["引言", "结语", "结论", "摘要", "讨论", "结果", "方法", "实验", "背景", "研究", "理论", "文献", "综述", "相关工作", "模型", "数据", "系统", "实现", "分析", "问题", "意义"]
+        if len(clean) > 16 and not any(keyword in clean for keyword in heading_keywords):
+            return None
         return 1
-    if re.match(r"^[一二三四五六七八九十]+[、.].+", text):
+    if re.match(r"^[一二三四五六七八九十]+[、.].+", clean):
         return 1
-    if re.match(r"^[（(][一二三四五六七八九十]+[)）].+", text):
+    if re.match(r"^[（(][一二三四五六七八九十]+[)）].+", clean):
         return 2
+    if re.match(r"^[（(]\d+[)）].+", clean):
+        return 2
+    return None
+
+
 def split_sections(text: str):
-    lines = [normalize_text(line) for line in text.splitlines()]
-    lines = [line for line in lines if line]
+    raw_lines = [normalize_text(line) for line in text.splitlines()]
+    lines = []
+    for line in raw_lines:
+        if not line:
+            continue
+        if re.fullmatch(r"\d{1,4}", line):
+            continue
+        if not re.search(r"[A-Za-z\u4e00-\u9fff]", line) and re.fullmatch(r"[\d\W]+", line):
+            continue
+        lines.append(line)
     sections = []
     current_title = "概览"
     current_level = 1
@@ -105,7 +136,7 @@ def split_sections(text: str):
     for line in lines:
         level = detect_heading_level(line)
         if level is not None:
-            if current_content:
+            if current_title != "概览" or current_content:
                 joined = normalize_text(" ".join(current_content))
                 sections.append({
                     "title": normalize_text(current_title) or current_title,
@@ -118,7 +149,7 @@ def split_sections(text: str):
         else:
             current_content.append(line)
 
-    if current_content:
+    if current_title != "概览" or current_content:
         joined = normalize_text(" ".join(current_content))
         sections.append({
             "title": normalize_text(current_title) or current_title,
@@ -127,15 +158,6 @@ def split_sections(text: str):
         })
 
     return sections
-
-
-    if re.match(r"^[（(]\d+[)）].+", text):
-        return 2
-    return None
-
-
-
-
 def build_section_thinking(title: str, summary: str, keywords):
     keyword_text = "、".join([item["term"] for item in keywords[:3]])
     if summary == "暂无摘要":
