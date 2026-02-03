@@ -87,7 +87,7 @@ def split_sections(text: str):
                 joined = normalize_text(" ".join(current_content))
                 sections.append({
                     "title": normalize_text(current_title) or current_title,
-                    "content": joined[:180] + ("..." if len(joined) > 180 else ""),
+                    "content": joined[:360] + ("..." if len(joined) > 360 else ""),
                 })
             current_title = line
             current_content = []
@@ -98,7 +98,7 @@ def split_sections(text: str):
         joined = normalize_text(" ".join(current_content))
         sections.append({
             "title": normalize_text(current_title) or current_title,
-            "content": joined[:180] + ("..." if len(joined) > 180 else ""),
+            "content": joined[:360] + ("..." if len(joined) > 360 else ""),
         })
 
     return sections
