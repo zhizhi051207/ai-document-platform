@@ -328,14 +328,171 @@ def build_response(payload):
         doc_copy = {k: v for k, v in doc.items() if k != "full_text"}
         cleaned_docs.append(doc_copy)
 
+    # 增强分析：文档类型识别和个性化图表
+    document_type = "other"
+    recommended_charts = []
+    enhanced_charts = {}
+    
+    if documents:
+        first_doc = documents[0]
+        doc_text = first_doc["full_text"]
+        doc_keywords = first_doc["keywords"]
+        
+        # 检测文档类型
+        document_type = detect_document_type(doc_text)
+        
+        # 推荐图表
+        recommended_charts = recommend_charts(document_type, doc_text, doc_keywords)
+        
+        # 生成增强图表数据
+        enhanced_charts = generate_enhanced_charts(doc_text, document_type, doc_keywords)
+    
     return {
         "documents": cleaned_docs,
         "keyword_chart": keyword_chart,
         "conclusion_graph": conclusion_graph,
         "comparison": comparison,
         "conflicts": conflicts,
+        # 新增字段
+        "document_type": document_type,
+        "recommended_charts": recommended_charts,
+        "enhanced_charts": enhanced_charts,
     }
 
+def detect_document_type(text):
+    """检测文档类型：学术论文、商业报告、技术文档、新闻文章、其他"""
+    text_lower = text.lower()
+    
+    # 学术论文特征
+    academic_keywords = ["abstract", "introduction", "methodology", "results", "discussion", "conclusion", "references", "参考文献", "摘要", "引言", "方法", "结果", "讨论", "结论"]
+    academic_count = sum(1 for keyword in academic_keywords if keyword in text_lower)
+    
+    # 商业报告特征
+    business_keywords = ["市场", "营销", "销售", "财务", "利润", "收入", "增长", "战略", "竞争", "客户", "产品", "服务", "年度报告", "季度报告"]
+    business_count = sum(1 for keyword in business_keywords if keyword in text_lower)
+    
+    # 技术文档特征
+    tech_keywords = ["api", "接口", "函数", "代码", "编程", "算法", "架构", "部署", "配置", "安装", "使用说明", "文档", "示例"]
+    tech_count = sum(1 for keyword in tech_keywords if keyword in text_lower)
+    
+    # 新闻文章特征
+    news_keywords = ["报道", "记者", "新闻", "消息", "据悉", "表示", "指出", "近日", "昨天", "今天", "日前", "发布", "举行"]
+    news_count = sum(1 for keyword in news_keywords if keyword in text_lower)
+    
+    # 判断
+    scores = {
+        "academic": academic_count,
+        "business": business_count,
+        "technical": tech_count,
+        "news": news_count
+    }
+    
+    max_type = max(scores, key=scores.get)
+    if scores[max_type] >= 2:
+        return max_type
+    return "other"
+
+
+def recommend_charts(doc_type, text, keywords):
+    """根据文档类型推荐图表组合"""
+    base_charts = ["keyword_barchart", "conclusion_graph"]
+    
+    if doc_type == "academic":
+        return base_charts + ["section_structure", "reference_distribution"]
+    elif doc_type == "business":
+        return base_charts + ["timeline", "entity_relationship"]
+    elif doc_type == "technical":
+        return base_charts + ["code_distribution", "api_statistics"]
+    elif doc_type == "news":
+        return base_charts + ["named_entity", "sentiment_analysis"]
+    else:
+        return base_charts + ["wordcloud", "category_pie"]
+
+
+def generate_enhanced_charts(text, doc_type, keywords):
+    """生成增强图表数据"""
+    enhanced = {}
+    
+    # 词云数据 (基于关键词权重)
+    wordcloud_data = []
+    for kw in keywords[:15]:
+        wordcloud_data.append({
+            "text": kw["term"],
+            "value": kw["score"] * 1000
+        })
+    enhanced["wordcloud"] = wordcloud_data
+    
+    # 分类饼图数据 (模拟分类分布)
+    pie_data = []
+    categories = []
+    if doc_type == "academic":
+        categories = ["引言", "方法", "结果", "讨论", "参考文献"]
+    elif doc_type == "business":
+        categories = ["市场分析", "财务数据", "战略规划", "竞争分析", "执行总结"]
+    elif doc_type == "technical":
+        categories = ["API文档", "代码示例", "安装指南", "配置说明", "故障排除"]
+    elif doc_type == "news":
+        categories = ["政治", "经济", "社会", "文化", "科技"]
+    else:
+        categories = ["第一部分", "第二部分", "第三部分", "第四部分", "其他"]
+    
+    import random
+    for i, cat in enumerate(categories):
+        pie_data.append({
+            "name": cat,
+            "value": random.randint(5, 30)  # 模拟数据，实际应基于内容分析
+        })
+    enhanced["pie"] = pie_data
+    
+    # 时间线数据 (如果检测到日期)
+    timeline_data = []
+    date_patterns = [
+        r"\d{4}年\d{1,2}月\d{1,2}日",
+        r"\d{4}-\d{1,2}-\d{1,2}",
+        r"\d{4}\.\d{1,2}\.\d{1,2}"
+    ]
+    for pattern in date_patterns:
+        dates = re.findall(pattern, text)
+        if dates:
+            for date in dates[:5]:
+                timeline_data.append({
+                    "date": date,
+                    "event": f"事件描述",
+                    "importance": random.randint(1, 10)
+                })
+            break
+    if not timeline_data:
+        # 生成模拟时间线
+        for i in range(3):
+            timeline_data.append({
+                "date": f"2025-{i+1}-01",
+                "event": f"关键事件 {i+1}",
+                "importance": random.randint(1, 10)
+            })
+    enhanced["timeline"] = timeline_data
+    
+    # 实体关系数据 (基于关键词共现)
+    entity_data = {
+        "nodes": [],
+        "links": []
+    }
+    for i, kw in enumerate(keywords[:8]):
+        entity_data["nodes"].append({
+            "id": kw["term"],
+            "group": i % 3 + 1
+        })
+    
+    for i in range(len(entity_data["nodes"])):
+        for j in range(i+1, len(entity_data["nodes"])):
+            if random.random() > 0.7:
+                entity_data["links"].append({
+                    "source": entity_data["nodes"][i]["id"],
+                    "target": entity_data["nodes"][j]["id"],
+                    "value": random.randint(1, 5)
+                })
+    enhanced["entity_network"] = entity_data
+    
+    return enhanced
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):

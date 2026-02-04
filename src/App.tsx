@@ -21,6 +21,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import EnhancedCharts from "@/components/EnhancedCharts"
 import "./App.css"
 
 type UploadFile = {
@@ -65,6 +66,18 @@ type AnalysisResult = {
     unique_keywords: Record<string, string[]>
   }
   conflicts: ConflictItem[]
+  // 新增字段
+  document_type: string
+  recommended_charts: string[]
+  enhanced_charts: {
+    wordcloud: Array<{ text: string; value: number }>
+    pie: Array<{ name: string; value: number }>
+    timeline: Array<{ date: string; event: string; importance: number }>
+    entity_network: {
+      nodes: Array<{ id: string; group: number }>
+      links: Array<{ source: string; target: string; value: number }>
+    }
+  }
 }
 
 function App() {
@@ -521,6 +534,13 @@ function App() {
                         </div>
                       </CardContent>
                     </Card>
+                     {result.document_type && result.enhanced_charts && (
+                       <EnhancedCharts
+                         enhancedCharts={result.enhanced_charts}
+                         documentType={result.document_type}
+                         recommendedCharts={result.recommended_charts}
+                       />
+                     )}
                   </TabsContent>
 
                   <TabsContent value="comparison" className="space-y-6">
