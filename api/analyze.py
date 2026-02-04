@@ -76,6 +76,7 @@ def summarize(text: str, max_sentences: int = 3):
 
 
 def detect_heading_level(line: str):
+    """标题识别算法 - 专注于论文标题识别"""
     text = normalize_text(line)
     if not text:
         return None
@@ -83,102 +84,149 @@ def detect_heading_level(line: str):
     # 移除末尾标点
     clean = re.sub(r"[，。；:：,]+$", "", text)
     
-    # 特殊标题识别
-    specials = {"摘要", "结论", "Abstract", "Conclusion", "引言", "前言", "引言", "背景", "研究背景", "研究方法", "实验结果", "讨论与分析", "总结", "参考文献", "致谢", "附录"}
-    if clean in specials:
-        return 1
+    # 排除太长的情况（可能不是标题）
+    if len(clean) > 120:
+        return None
     
+    # 排除看起来像句子开头的情况
+    sentence_starters = ["本文", "我们", "本研究", "本实验", "本文通过", "本文研究", 
+                         "实验结果显示", "结果表明", "数据分析显示", "研究发现",
+                         "This paper", "We ", "Our study", "Our experiment"]
+    if any(starter in clean for starter in sentence_starters):
+        return None
+    
+    # 排除包含句号的行（除非是编号的一部分或标题前缀）
+    if "。" in clean or "." in clean:
+        # 检查是否可能是编号（如"1.1"或"A.1"）
+        if not (re.match(r"^\d+\.\d+", clean) or re.match(r"^[A-Z]\.\d+", clean)):
+            # 检查是否以常见标题前缀开头（如"Abstract:"）
+            title_prefixes_check = ["摘要：", "Abstract:", "关键词：", "Keywords:", "引言：", "Introduction:", 
+                                  "方法：", "Methods:", "结果：", "Results:", "讨论：", "Discussion:", 
+                                  "结论：", "Conclusion:", "参考文献：", "References:"]
+            if not any(clean.startswith(prefix) for prefix in title_prefixes_check):
+                return None
+    
+    # 1. 精确匹配的章节标题（中英文）
+    exact_titles = {
+        # 一级标题
+        "摘要": 1, "Abstract": 1,
+        "关键词": 1, "Keywords": 1,
+        "引言": 1, "前言": 1, "Introduction": 1,
+        "背景": 1, "Background": 1,
+        "文献综述": 1, "文献回顾": 1, "Literature Review": 1,
+        "方法": 1, "研究方法": 1, "Method": 1, "Methods": 1, "Methodology": 1,
+        "实验设计": 1, "Experimental Design": 1,
+        "结果": 1, "实验结果": 1, "Results": 1,
+        "讨论": 1, "分析与讨论": 1, "Discussion": 1,
+        "结论": 1, "总结": 1, "Conclusion": 1, "Conclusions": 1,
+        "参考文献": 1, "引用文献": 1, "References": 1, "Bibliography": 1,
+        "致谢": 1, "Acknowledgements": 1, "Acknowledgments": 1,
+        "附录": 1, "Appendix": 1,
+        # 二级标题（可能带简短说明）
+        "研究目的": 2, "研究意义": 2, "理论基础": 2,
+        "数据收集": 2, "数据分析": 2, "统计方法": 2,
+        "实验一": 2, "实验二": 2, "实验三": 2,
+        "结果分析": 2, "结果讨论": 2,
+        "研究局限": 2, "未来展望": 2
+    }
+    
+    if clean in exact_titles:
+        return exact_titles[clean]
+    
+    # 2. 带编号的标题
     # 中文章节编号: 第X章
     if re.match(r"^第[一二三四五六七八九十]+章", clean):
         return 1
     
     # 数字编号: 1. 或 1.1 或 1.1.1
-    if re.match(r"^\d+\.\d+\.\d+(?:\s|、|\.|\)|）).+", clean):
+    # 修复：匹配数字后跟点号、空格、顿号、括号等分隔符
+    if re.match(r"^\d+\.\d+\.\d+(?:[\.\s、\)）])?", clean):
         return 3
-    if re.match(r"^\d+\.\d+(?:\s|、|\.|\)|）).+", clean):
+    if re.match(r"^\d+\.\d+(?:[\.\s、\)）])?", clean):
         return 2
-    if re.match(r"^\d+(?:\s|、|\.|\)|）).+", clean):
+    if re.match(r"^\d+(?:[\.\s、\)）])?", clean):
         return 1
     
     # 中文数字编号: 一、 或 (一) 或 一.
-    if re.match(r"^[一二三四五六七八九十]+[、.].+", clean):
+    if re.match(r"^[一二三四五六七八九十]+[、\\.]", clean):
         return 1
-    if re.match(r"^[（(][一二三四五六七八九十]+[)）].+", clean):
+    if re.match(r"^[（(][一二三四五六七八九十]+[)）]", clean):
         return 2
     
     # 英文字母编号: A. 或 (A) 或 A)
-    if re.match(r"^[A-Z][、.)].+", clean):
+    if re.match(r"^[A-Z](?:[\.\s、\)）])", clean):
         return 2
     
-    # 基于关键词的标题识别（改进版）
-    heading_keywords = [
-        "引言", "前言", "绪论", "绪言", "Introduction", "Foreword", "Preamble",
-        "背景", "研究背景", "Background", "Literature Background",
-        "文献综述", "相关研究", "前人研究", "Related Work", "Literature Review",
-        "方法", "研究方法", "Method", "Methodology", "实验方法", "研究设计",
-        "实验设计", "技术路线", "技术方案", "Technical Approach",
-        "算法", "模型", "框架", "Algorithm", "Model", "Framework",
-        "实验", "实验过程", "Experiments", "Experimental Procedure",
-        "结果", "实验结果", "Result", "Results", "Findings",
-        "数据", "数据分析", "Data Analysis", "统计分析", "Statistical Analysis",
-        "评估", "性能评估", "Evaluation", "Performance Evaluation",
-        "讨论", "分析与讨论", "Discussion", "Analysis and Discussion",
-        "结论", "总结", "Conclusion", "Conclusions", "Summary",
-        "展望", "未来工作", "Future Work", "研究展望",
-        "参考文献", "引用文献", "References", "Bibliography",
-        "致谢", "Acknowledgements", "Acknowledgments",
-        "附录", "附", "Appendix", "附件", "Attachments"
-    ]
+    # 阿拉伯数字编号: ① 或 1) 或 1.
+    if re.match(r"^[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]", clean):
+        return 2
+    if re.match(r"^\d+[)）]", clean):
+        return 2
+    # 添加对 (1) 格式的支持
+    if re.match(r"^[（(]\d+[)）]", clean):
+        return 2
     
-    # 规则1: 检查是否是纯关键字或关键字开头
-    for keyword in heading_keywords:
-        if clean == keyword:  # 精确匹配
-            return 1
+    # 3. 常见标题开头（带冒号或空格）
+    title_prefixes = ["摘要：", "Abstract:", "关键词：", "Keywords:", "引言：", "Introduction:", 
+                      "方法：", "Methods:", "结果：", "Results:", "讨论：", "Discussion:", 
+                      "结论：", "Conclusion:", "参考文献：", "References:"]
+    
+    for prefix in title_prefixes:
+        if clean.startswith(prefix):
+            remaining = clean[len(prefix):].strip()
+            if len(remaining) <= 60:  # 剩余部分不能太长
+                return 1
+    
+    # 4. 包含关键词的标题（较宽松）
+    title_keywords = ["摘要", "Abstract", "引言", "前言", "Introduction", "背景", "Background", 
+                     "方法", "方法", "Methods", "Methodology", "实验", "Experiment", 
+                     "结果", "Results", "讨论", "Discussion", "结论", "Conclusion",
+                     "参考文献", "References", "致谢", "Acknowledgements", "附录", "Appendix"]
+    
+    for keyword in title_keywords:
+        # 如果行以关键词开头，且长度适中
         if clean.startswith(keyword) and len(clean) <= 80:
+            # 检查是否包含标点（如果有标点，可能是内容）
+            if "，" in clean or "。" in clean:
+                continue
             return 2
     
-    # 规则2: 关键词出现在行中，且行长度适中
-    for keyword in heading_keywords:
-        if keyword in clean and len(clean) <= 80:
-            # 排除明显的内容特征
-            if "，" in clean or "。" in clean or "本文" in clean or "我们" in clean:
-                continue
-            return 3
-    
-    # 检查大写字母开头的英文标题
-    if re.match(r"^[A-Z][A-Za-z ]{1,100}[^.]$", clean) and len(clean) <= 80:
+    # 5. 英文标题特征：首字母大写，多个单词，没有句号
+    if re.match(r"^[A-Z][A-Za-z ]+$", clean) and len(clean) <= 100:
         words = clean.split()
-        if len(words) >= 1 and len(words) <= 8:
-            # 检查是否都是大写或首字母大写
-            all_caps_or_title = all(w[0].isupper() for w in words if w)
-            if all_caps_or_title:
+        if 1 <= len(words) <= 8:
+            # 检查是否都是首字母大写（标题大小写）
+            title_case = all(w[0].isupper() for w in words if w)
+            if title_case:
                 return 2
     
-    # 检查中文标题特征：较短且不含标点
-    if re.search(r"[\u4e00-\u9fff]", clean) and len(clean) <= 50:
-        # 排除包含内容特征
+    # 6. 短中文短语（可能是标题） - 更严格的规则
+    if re.search(r"[\u4e00-\u9fff]", clean) and 3 <= len(clean) <= 40:
+        # 严格排除包含标点
         if "，" in clean or "。" in clean or "：" in clean:
             return None
-        # 排除常见内容词汇
-        content_words = ["本文", "我们", "本章", "本研究", "本实验", "结果表明", "数据分析", "研究发现"]
-        if any(word in clean for word in content_words):
+        
+        # 排除以代词或句子开头词开头
+        if re.match(r"^[它他她这那此其该首先其次然后最后]", clean):
             return None
         
-        # 检查标题特征词
-        title_words = ["分析", "研究", "方法", "设计", "实验", "结果", "讨论", "结论", 
-                      "展望", "背景", "意义", "目的", "目标", "问题", "假设", "原理",
-                      "特点", "优势", "挑战", "方案", "框架", "模型", "算法"]
-        for word in title_words:
-            if clean.endswith(word) or word in clean:
+        # 检查常见标题结尾词
+        title_endings = ["分析", "研究", "方法", "设计", "实验", "结果", "讨论", "结论", 
+                        "展望", "背景", "意义", "目的", "目标", "问题", "假设"]
+        for ending in title_endings:
+            if clean.endswith(ending):
                 return 3
         
-        # 如果是短句（3-8个词）且没有动词特征，可能是标题
-        words = re.findall(r"[\u4e00-\u9fff]+", clean)
-        if 3 <= len(words) <= 8:
-            # 检查是否看起来像陈述句
+        # 如果是2-6个中文词的短语
+        chinese_words = re.findall(r"[\u4e00-\u9fff]+", clean)
+        if 2 <= len(chinese_words) <= 6:
+            # 排除动词开头
             verbs = ["是", "有", "在", "为", "可以", "能够", "会", "要", "应该"]
-            if not any(verb in clean for verb in verbs):
-                return 3
+            if not any(chinese_words[0].startswith(v) for v in verbs):
+                # 检查是否包含常见内容词
+                content_words = ["本文", "我们", "本章", "本研究", "本实验", "结果表明"]
+                if not any(word in clean for word in content_words):
+                    return 3
     
     return None
     
