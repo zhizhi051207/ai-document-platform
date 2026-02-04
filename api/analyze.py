@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import io
 import json
 import math
@@ -13,6 +14,7 @@ from docx import Document
 from snownlp import SnowNLP
 import openai
 import os
+import sys
 
 # OpenRouter API 配置
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
@@ -36,18 +38,22 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
     if lower.endswith(".pdf"):
         # 过滤pdfplumber的常见警告
         with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # 忽略所有警告
             warnings.filterwarnings("ignore", message="CropBox missing from /Page.*")
             try:
-                with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-                    pages = []
-                    for page in pdf.pages:
-                        try:
-                            text = page.extract_text() or ""
-                            pages.append(text)
-                        except Exception as page_exc:
-                            # 单页提取失败不影响其他页
-                            pages.append(f"[页面提取错误: {str(page_exc)}]")
-                    return "\n".join(pages)
+                # 重定向stderr以捕获底层库的直接输出
+                stderr_capture = io.StringIO()
+                with contextlib.redirect_stderr(stderr_capture):
+                    with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                        pages = []
+                        for page in pdf.pages:
+                            try:
+                                text = page.extract_text() or ""
+                                pages.append(text)
+                            except Exception as page_exc:
+                                # 单页提取失败不影响其他页
+                                pages.append(f"[页面提取错误: {str(page_exc)}]")
+                        return "\n".join(pages)
             except Exception as pdf_exc:
                 # PDF解析失败时返回空字符串
                 return f"[PDF解析失败: {str(pdf_exc)}]"
