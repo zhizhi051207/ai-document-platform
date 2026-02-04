@@ -2,7 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from "recharts";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+
 
 interface EnhancedChartsProps {
   enhancedCharts: {
@@ -113,7 +113,7 @@ export default function EnhancedCharts({ enhancedCharts, documentType, recommend
                       fill="#8884d8"
                       dataKey="value"
                     >
-                      {enhancedCharts.pie.map((entry, index) => (
+                      {enhancedCharts.pie.map((_entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>

@@ -4,6 +4,7 @@ import json
 import math
 import re
 import unicodedata
+import warnings
 from collections import Counter
 from http.server import BaseHTTPRequestHandler
 
@@ -18,6 +19,9 @@ OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 openai.api_key = OPENROUTER_API_KEY
 openai.base_url = "https://openrouter.ai/api/v1"
 
+# AI模型配置
+AI_MODEL = "anthropic/claude-sonnet-4.5"
+
 def normalize_text(text: str) -> str:
     if not text:
         return ""
@@ -30,23 +34,43 @@ def normalize_text(text: str) -> str:
 def extract_text(file_bytes: bytes, filename: str) -> str:
     lower = filename.lower()
     if lower.endswith(".pdf"):
-        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
-            pages = [page.extract_text() or "" for page in pdf.pages]
-        return "\n".join(pages)
+        # 过滤pdfplumber的常见警告
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="CropBox missing from /Page")
+            try:
+                with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                    pages = []
+                    for page in pdf.pages:
+                        try:
+                            text = page.extract_text() or ""
+                            pages.append(text)
+                        except Exception as page_exc:
+                            # 单页提取失败不影响其他页
+                            pages.append(f"[页面提取错误: {str(page_exc)}]")
+                    return "\n".join(pages)
+            except Exception as pdf_exc:
+                # PDF解析失败时返回空字符串
+                return f"[PDF解析失败: {str(pdf_exc)}]"
     if lower.endswith(".docx") or lower.endswith(".doc"):
-        doc = Document(io.BytesIO(file_bytes))
-        return "\n".join([para.text for para in doc.paragraphs])
-    return file_bytes.decode("utf-8", errors="ignore")
+        try:
+            doc = Document(io.BytesIO(file_bytes))
+            return "\n".join([para.text for para in doc.paragraphs])
+        except Exception as doc_exc:
+            return f"[DOCX解析失败: {str(doc_exc)}]"
+    try:
+        return file_bytes.decode("utf-8", errors="ignore")
+    except Exception:
+        return ""
 
 
 # AI增强函数
 def ai_summarize(text: str, max_sentences: int = 3) -> str:
-    """使用Claude生成摘要，失败时返回空字符串触发回退"""
+    """使用AI生成摘要，失败时返回空字符串触发回退"""
     try:
         if len(text) < 100:
             return ""
         response = openai.chat.completions.create(
-            model="anthropic/claude-sonnet-4.5",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": "你是一个专业文档分析助手，请用中文生成简洁准确的摘要。"},
                 {"role": "user", "content": f"请用{max_sentences}句话总结以下内容：\n\n{text[:3000]}"}
@@ -61,12 +85,12 @@ def ai_summarize(text: str, max_sentences: int = 3) -> str:
 
 
 def ai_extract_keywords(text: str, top_k: int = 8) -> list:
-    """使用Claude提取关键词，失败时返回空列表触发回退"""
+    """使用AI提取关键词，失败时返回空列表触发回退"""
     try:
         if len(text) < 200:
             return []
         response = openai.chat.completions.create(
-            model="anthropic/claude-sonnet-4.5",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": "你是一个专业文档分析助手，请提取文档的关键词，每行一个。"},
                 {"role": "user", "content": f"从以下内容中提取{top_k}个最重要的关键词，每行一个：\n\n{text[:4000]}"}
@@ -84,13 +108,13 @@ def ai_extract_keywords(text: str, top_k: int = 8) -> list:
 
 
 def ai_extract_conclusions(text: str, sections: list) -> list:
-    """使用Claude提取结论性观点，失败时返回空列表触发回退"""
+    """使用AI提取结论性观点，失败时返回空列表触发回退"""
     try:
         if len(text) < 300:
             return []
         section_titles = [s.get("title", "") for s in sections[:5]]
         response = openai.chat.completions.create(
-            model="anthropic/claude-sonnet-4.5",
+            model=AI_MODEL,
             messages=[
                 {"role": "system", "content": "你是一个专业文档分析助手，请提取文档的主要结论或核心观点。"},
                 {"role": "user", "content": f"基于以下文档内容和章节标题，提取3-5个主要结论或核心观点，每行一个：\n\n文档片段：{text[:3500]}\n\n章节标题：{', '.join(section_titles)}"}
