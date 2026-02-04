@@ -79,41 +79,65 @@ def detect_heading_level(line: str):
     text = normalize_text(line)
     if not text:
         return None
-    if len(text) > 80 and re.search(r"[a-z]", text):
-        return None
-    if text.count(" ") > 8 and re.search(r"[a-z]", text):
-        return None
+    
+    # 移除末尾标点
     clean = re.sub(r"[，。；:：,]+$", "", text)
-    specials = {"摘要", "结论", "Abstract", "Conclusion"}
+    
+    # 特殊标题识别
+    specials = {"摘要", "结论", "Abstract", "Conclusion", "引言", "前言", "引言", "背景", "研究背景", "研究方法", "实验结果", "讨论与分析", "总结", "参考文献", "致谢", "附录"}
     if clean in specials:
         return 1
+    
+    # 中文章节编号: 第X章
     if re.match(r"^第[一二三四五六七八九十]+章", clean):
         return 1
+    
+    # 数字编号: 1. 或 1.1 或 1.1.1
     if re.match(r"^\d+\.\d+\.\d+(?:\s|、|\.|\)|）).+", clean):
-        if len(clean) > 80:
-            return None
         return 3
     if re.match(r"^\d+\.\d+(?:\s|、|\.|\)|）).+", clean):
-        if len(clean) > 60:
-            return None
         return 2
     if re.match(r"^\d+(?:\s|、|\.|\)|）).+", clean):
-        if len(clean) > 40:
-            return None
-        if re.search(r"[，。；:：]", clean):
-            return None
-        if re.search(r"\b\d{4}\b", clean) and not re.search(r"(章|节|引言|结语|结果|讨论|摘要)", clean):
-            return None
-        heading_keywords = ["引言", "结语", "结论", "摘要", "讨论", "结果", "方法", "实验", "背景", "研究", "理论", "文献", "综述", "相关工作", "模型", "数据", "系统", "实现", "分析", "问题", "意义"]
-        if len(clean) > 16 and not any(keyword in clean for keyword in heading_keywords):
-            return None
         return 1
+    
+    # 中文数字编号: 一、 或 (一) 或 一.
     if re.match(r"^[一二三四五六七八九十]+[、.].+", clean):
         return 1
     if re.match(r"^[（(][一二三四五六七八九十]+[)）].+", clean):
         return 2
-    if re.match(r"^[（(]\d+[)）].+", clean):
+    
+    # 英文字母编号: A. 或 (A) 或 A)
+    if re.match(r"^[A-Z][、.)].+", clean):
         return 2
+    
+    # 基于关键词的标题识别 (放宽条件)
+    heading_keywords = [
+        "引言", "前言", "背景", "研究背景", "问题提出", "研究意义", "文献综述", "相关工作",
+        "方法", "研究方法", "实验设计", "技术路线", "算法", "模型", "框架",
+        "实验", "实验结果", "数据", "数据分析", "统计", "评估", "性能",
+        "结果", "研究结果", "发现", "讨论", "分析与讨论", "结论", "总结", "展望",
+        "参考文献", "引用", "致谢", "附录", "附件", "图表目录"
+    ]
+    
+    # 检查是否包含标题关键词
+    if any(keyword in clean for keyword in heading_keywords):
+        # 如果包含关键词且长度适中，可能是标题
+        if 5 <= len(clean) <= 120:
+            return 2 if len(clean) > 40 else 1
+    
+    # 检查大写字母开头且长度适中的行（可能是英文标题）
+    if re.match(r"^[A-Z][A-Za-z\s]{1,80}[^.]$", clean) and len(clean) <= 80:
+        return 2
+    
+    # 检查中文标题特征：较短且不含句号
+    if re.search(r"[\u4e00-\u9fff]", clean) and len(clean) <= 40 and "." not in clean:
+        # 排除明显的内容行
+        if re.search(r"[，。；:：]", clean):
+            return None
+        if re.search(r"\b(是|的|在|和|有|为|可以|能够|不能|不会)\b", clean):
+            return None
+        return 3  # 三级标题
+    
     return None
 
 
