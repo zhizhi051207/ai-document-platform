@@ -9,6 +9,11 @@ import warnings
 from collections import Counter
 from http.server import BaseHTTPRequestHandler
 
+# 全局警告抑制 - 防止pdfplumber的警告
+warnings.filterwarnings("ignore", message="CropBox missing from /Page.*")
+warnings.simplefilter("ignore", category=UserWarning)  # 忽略所有用户警告
+warnings.simplefilter("ignore", category=DeprecationWarning)  # 忽略弃用警告
+
 import pdfplumber
 from docx import Document
 from snownlp import SnowNLP
@@ -36,12 +41,10 @@ def normalize_text(text: str) -> str:
 def extract_text(file_bytes: bytes, filename: str) -> str:
     lower = filename.lower()
     if lower.endswith(".pdf"):
-        # 过滤pdfplumber的常见警告
+        # 重定向stderr以捕获底层库的直接输出，并确保警告被抑制
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")  # 忽略所有警告
-            warnings.filterwarnings("ignore", message="CropBox missing from /Page.*")
+            warnings.simplefilter("ignore")  # 确保在此上下文中的所有警告都被抑制
             try:
-                # 重定向stderr以捕获底层库的直接输出
                 stderr_capture = io.StringIO()
                 with contextlib.redirect_stderr(stderr_capture):
                     with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
