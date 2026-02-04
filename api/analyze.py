@@ -110,7 +110,7 @@ def detect_heading_level(line: str):
     if re.match(r"^[A-Z][、.)].+", clean):
         return 2
     
-    # 基于关键词的标题识别 (放宽条件)
+    # 基于关键词的标题识别 (更严格的规则)
     heading_keywords = [
         "引言", "前言", "背景", "研究背景", "问题提出", "研究意义", "文献综述", "相关工作",
         "方法", "研究方法", "实验设计", "技术路线", "算法", "模型", "框架",
@@ -119,22 +119,42 @@ def detect_heading_level(line: str):
         "参考文献", "引用", "致谢", "附录", "附件", "图表目录"
     ]
     
-    # 检查是否包含标题关键词
-    if any(keyword in clean for keyword in heading_keywords):
-        # 如果包含关键词且长度适中，可能是标题
-        if 5 <= len(clean) <= 120:
-            return 2 if len(clean) > 40 else 1
+    # 检查是否包含标题关键词 - 更严格的规则
+    for keyword in heading_keywords:
+        if keyword in clean:
+            # 规则1: 如果以关键词开头或结尾，很可能是标题
+            if clean.startswith(keyword) or clean.endswith(keyword):
+                if 3 <= len(clean) <= 60:  # 标题通常不会太长
+                    return 2 if len(clean) > 30 else 1
+            
+            # 规则2: 如果关键词在开头附近（前10个字符内）
+            keyword_pos = clean.find(keyword)
+            if keyword_pos >= 0 and keyword_pos <= 10:
+                # 检查整行内容是否主要是标题（而不是内容段落）
+                # 标题通常不含标点符号（除了结尾可能有的冒号、括号等）
+                if not re.search(r"[，。；]", clean[:keyword_pos + len(keyword) + 10]):
+                    if len(clean) <= 80:  # 标题通常较短
+                        return 3  # 三级标题
     
     # 检查大写字母开头且长度适中的行（可能是英文标题）
-    if re.match(r"^[A-Z][A-Za-z\s]{1,80}[^.]$", clean) and len(clean) <= 80:
-        return 2
+    if re.match(r"^[A-Z][A-Za-z ]{1,50}[^.]$", clean) and len(clean) <= 60:
+        # 排除明显的内容行：包含小写单词太多或包含标点
+        words = clean.split()
+        lowercase_words = sum(1 for w in words if w and w[0].islower())
+        if lowercase_words <= 1 and not re.search(r"[，。；:：]", clean):
+            return 2
     
     # 检查中文标题特征：较短且不含句号
     if re.search(r"[\u4e00-\u9fff]", clean) and len(clean) <= 40 and "." not in clean:
         # 排除明显的内容行
         if re.search(r"[，。；:：]", clean):
             return None
-        if re.search(r"\b(是|的|在|和|有|为|可以|能够|不能|不会)\b", clean):
+        # 排除包含常见内容词汇的行
+        content_words = ["是", "的", "在", "和", "有", "为", "可以", "能够", "不能", "不会", "这种", "那种", "这些", "那些", "例如", "比如", "包括", "包含"]
+        if any(word in clean for word in content_words):
+            return None
+        # 排除以代词开头的行
+        if re.match(r"^[它他她这那此其该]", clean):
             return None
         return 3  # 三级标题
     
