@@ -14,7 +14,7 @@ import openai
 import os
 
 # OpenRouter API 配置
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "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")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 openai.api_key = OPENROUTER_API_KEY
 openai.base_url = "https://openrouter.ai/api/v1"
 
