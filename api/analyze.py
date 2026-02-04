@@ -10,7 +10,13 @@ from http.server import BaseHTTPRequestHandler
 import pdfplumber
 from docx import Document
 from snownlp import SnowNLP
+import openai
+import os
 
+# OpenRouter API 配置
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "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")
+openai.api_key = OPENROUTER_API_KEY
+openai.base_url = "https://openrouter.ai/api/v1"
 
 def normalize_text(text: str) -> str:
     if not text:
@@ -31,6 +37,73 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
         doc = Document(io.BytesIO(file_bytes))
         return "\n".join([para.text for para in doc.paragraphs])
     return file_bytes.decode("utf-8", errors="ignore")
+
+
+# AI增强函数
+def ai_summarize(text: str, max_sentences: int = 3) -> str:
+    """使用Claude生成摘要，失败时返回空字符串触发回退"""
+    try:
+        if len(text) < 100:
+            return ""
+        response = openai.chat.completions.create(
+            model="anthropic/claude-sonnet-4.5",
+            messages=[
+                {"role": "system", "content": "你是一个专业文档分析助手，请用中文生成简洁准确的摘要。"},
+                {"role": "user", "content": f"请用{max_sentences}句话总结以下内容：\n\n{text[:3000]}"}
+            ],
+            max_tokens=500,
+            temperature=0.3,
+            timeout=10
+        )
+        return response.choices[0].message.content.strip()
+    except Exception:
+        return ""
+
+
+def ai_extract_keywords(text: str, top_k: int = 8) -> list:
+    """使用Claude提取关键词，失败时返回空列表触发回退"""
+    try:
+        if len(text) < 200:
+            return []
+        response = openai.chat.completions.create(
+            model="anthropic/claude-sonnet-4.5",
+            messages=[
+                {"role": "system", "content": "你是一个专业文档分析助手，请提取文档的关键词，每行一个。"},
+                {"role": "user", "content": f"从以下内容中提取{top_k}个最重要的关键词，每行一个：\n\n{text[:4000]}"}
+            ],
+            max_tokens=300,
+            temperature=0.2,
+            timeout=10
+        )
+        content = response.choices[0].message.content.strip()
+        keywords = [line.strip() for line in content.split('\n') if line.strip()]
+        keywords = keywords[:top_k]
+        return [{"term": kw, "score": 1.0 - (i * 0.05)} for i, kw in enumerate(keywords)]
+    except Exception:
+        return []
+
+
+def ai_extract_conclusions(text: str, sections: list) -> list:
+    """使用Claude提取结论性观点，失败时返回空列表触发回退"""
+    try:
+        if len(text) < 300:
+            return []
+        section_titles = [s.get("title", "") for s in sections[:5]]
+        response = openai.chat.completions.create(
+            model="anthropic/claude-sonnet-4.5",
+            messages=[
+                {"role": "system", "content": "你是一个专业文档分析助手，请提取文档的主要结论或核心观点。"},
+                {"role": "user", "content": f"基于以下文档内容和章节标题，提取3-5个主要结论或核心观点，每行一个：\n\n文档片段：{text[:3500]}\n\n章节标题：{', '.join(section_titles)}"}
+            ],
+            max_tokens=400,
+            temperature=0.3,
+            timeout=10
+        )
+        content = response.choices[0].message.content.strip()
+        conclusions = [line.strip() for line in content.split('\n') if line.strip()]
+        return conclusions[:5]
+    except Exception:
+        return []
 
 
 def tokenize(text: str):
@@ -283,8 +356,12 @@ def build_response(payload):
         sections = []
         for section in sections_raw:
             content = section["content"]
-            summary = normalize_text(summarize(content, max_sentences=2))
-            keywords = extract_keywords(content, top_k=8)
+            # 尝试AI增强，失败则回退到传统算法
+            ai_summary = ai_summarize(content, max_sentences=2)
+            summary = normalize_text(ai_summary) if ai_summary else normalize_text(summarize(content, max_sentences=2))
+            
+            ai_keywords = ai_extract_keywords(content, top_k=8)
+            keywords = ai_keywords if ai_keywords else extract_keywords(content, top_k=8)
             excerpt = content[:320] + ("..." if len(content) > 320 else "")
             sections.append({
                 "title": section["title"],
@@ -293,11 +370,17 @@ def build_response(payload):
                 "keywords": keywords,
                 "thinking": build_section_thinking(section["title"], summary, keywords),
             })
-        keywords = extract_keywords(text)
-        summary = normalize_text(summarize(text))
+        # 文档级AI增强，失败则回退
+        ai_keywords = ai_extract_keywords(text)
+        keywords = ai_keywords if ai_keywords else extract_keywords(text)
+        
+        ai_summary = ai_summarize(text)
+        summary = normalize_text(ai_summary) if ai_summary else normalize_text(summarize(text))
+        
+        ai_conclusions = ai_extract_conclusions(text, sections_raw)
         conclusions = [
             normalize_text(item)
-            for item in extract_conclusions(text, sections_raw)
+            for item in (ai_conclusions if ai_conclusions else extract_conclusions(text, sections_raw))
             if normalize_text(item)
         ]
         documents.append({
