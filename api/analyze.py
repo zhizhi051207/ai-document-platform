@@ -76,160 +76,44 @@ def summarize(text: str, max_sentences: int = 3):
 
 
 def detect_heading_level(line: str):
-    """标题识别算法 - 专注于论文标题识别"""
     text = normalize_text(line)
     if not text:
         return None
-    
-    # 移除末尾标点
+    if len(text) > 80 and re.search(r"[a-z]", text):
+        return None
+    if text.count(" ") > 8 and re.search(r"[a-z]", text):
+        return None
     clean = re.sub(r"[，。；:：,]+$", "", text)
-    
-    # 排除太长的情况（可能不是标题）
-    if len(clean) > 120:
-        return None
-    
-    # 排除看起来像句子开头的情况
-    sentence_starters = ["本文", "我们", "本研究", "本实验", "本文通过", "本文研究", 
-                         "实验结果显示", "结果表明", "数据分析显示", "研究发现",
-                         "This paper", "We ", "Our study", "Our experiment"]
-    if any(starter in clean for starter in sentence_starters):
-        return None
-    
-    # 排除包含句号的行（除非是编号的一部分或标题前缀）
-    if "。" in clean or "." in clean:
-        # 检查是否可能是编号（如"1.1"或"A.1"）
-        if not (re.match(r"^\d+\.\d+", clean) or re.match(r"^[A-Z]\.\d+", clean)):
-            # 检查是否以常见标题前缀开头（如"Abstract:"）
-            title_prefixes_check = ["摘要：", "Abstract:", "关键词：", "Keywords:", "引言：", "Introduction:", 
-                                  "方法：", "Methods:", "结果：", "Results:", "讨论：", "Discussion:", 
-                                  "结论：", "Conclusion:", "参考文献：", "References:"]
-            if not any(clean.startswith(prefix) for prefix in title_prefixes_check):
-                return None
-    
-    # 1. 精确匹配的章节标题（中英文）
-    exact_titles = {
-        # 一级标题
-        "摘要": 1, "Abstract": 1,
-        "关键词": 1, "Keywords": 1,
-        "引言": 1, "前言": 1, "Introduction": 1,
-        "背景": 1, "Background": 1,
-        "文献综述": 1, "文献回顾": 1, "Literature Review": 1,
-        "方法": 1, "研究方法": 1, "Method": 1, "Methods": 1, "Methodology": 1,
-        "实验设计": 1, "Experimental Design": 1,
-        "结果": 1, "实验结果": 1, "Results": 1,
-        "讨论": 1, "分析与讨论": 1, "Discussion": 1,
-        "结论": 1, "总结": 1, "Conclusion": 1, "Conclusions": 1,
-        "参考文献": 1, "引用文献": 1, "References": 1, "Bibliography": 1,
-        "致谢": 1, "Acknowledgements": 1, "Acknowledgments": 1,
-        "附录": 1, "Appendix": 1,
-        # 二级标题（可能带简短说明）
-        "研究目的": 2, "研究意义": 2, "理论基础": 2,
-        "数据收集": 2, "数据分析": 2, "统计方法": 2,
-        "实验一": 2, "实验二": 2, "实验三": 2,
-        "结果分析": 2, "结果讨论": 2,
-        "研究局限": 2, "未来展望": 2
-    }
-    
-    if clean in exact_titles:
-        return exact_titles[clean]
-    
-    # 2. 带编号的标题
-    # 中文章节编号: 第X章
+    specials = {"摘要", "结论", "Abstract", "Conclusion"}
+    if clean in specials:
+        return 1
     if re.match(r"^第[一二三四五六七八九十]+章", clean):
         return 1
-    
-    # 数字编号: 1. 或 1.1 或 1.1.1
-    # 修复：匹配数字后跟点号、空格、顿号、括号等分隔符
-    if re.match(r"^\d+\.\d+\.\d+(?:[\.\s、\)）])?", clean):
+    if re.match(r"^\d+\.\d+\.\d+(?:\s|、|\.|\)|）).+", clean):
+        if len(clean) > 80:
+            return None
         return 3
-    if re.match(r"^\d+\.\d+(?:[\.\s、\)）])?", clean):
-        return 2
-    if re.match(r"^\d+(?:[\.\s、\)）])?", clean):
-        return 1
-    
-    # 中文数字编号: 一、 或 (一) 或 一.
-    if re.match(r"^[一二三四五六七八九十]+[、\\.]", clean):
-        return 1
-    if re.match(r"^[（(][一二三四五六七八九十]+[)）]", clean):
-        return 2
-    
-    # 英文字母编号: A. 或 (A) 或 A)
-    if re.match(r"^[A-Z](?:[\.\s、\)）])", clean):
-        return 2
-    
-    # 阿拉伯数字编号: ① 或 1) 或 1.
-    if re.match(r"^[①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳]", clean):
-        return 2
-    if re.match(r"^\d+[)）]", clean):
-        return 2
-    # 添加对 (1) 格式的支持
-    if re.match(r"^[（(]\d+[)）]", clean):
-        return 2
-    
-    # 3. 常见标题开头（带冒号或空格）
-    title_prefixes = ["摘要：", "Abstract:", "关键词：", "Keywords:", "引言：", "Introduction:", 
-                      "方法：", "Methods:", "结果：", "Results:", "讨论：", "Discussion:", 
-                      "结论：", "Conclusion:", "参考文献：", "References:"]
-    
-    for prefix in title_prefixes:
-        if clean.startswith(prefix):
-            remaining = clean[len(prefix):].strip()
-            if len(remaining) <= 60:  # 剩余部分不能太长
-                return 1
-    
-    # 4. 包含关键词的标题（较宽松）
-    title_keywords = ["摘要", "Abstract", "引言", "前言", "Introduction", "背景", "Background", 
-                     "方法", "方法", "Methods", "Methodology", "实验", "Experiment", 
-                     "结果", "Results", "讨论", "Discussion", "结论", "Conclusion",
-                     "参考文献", "References", "致谢", "Acknowledgements", "附录", "Appendix"]
-    
-    for keyword in title_keywords:
-        # 如果行以关键词开头，且长度适中
-        if clean.startswith(keyword) and len(clean) <= 80:
-            # 检查是否包含标点（如果有标点，可能是内容）
-            if "，" in clean or "。" in clean:
-                continue
-            return 2
-    
-    # 5. 英文标题特征：首字母大写，多个单词，没有句号
-    if re.match(r"^[A-Z][A-Za-z ]+$", clean) and len(clean) <= 100:
-        words = clean.split()
-        if 1 <= len(words) <= 8:
-            # 检查是否都是首字母大写（标题大小写）
-            title_case = all(w[0].isupper() for w in words if w)
-            if title_case:
-                return 2
-    
-    # 6. 短中文短语（可能是标题） - 更严格的规则
-    if re.search(r"[\u4e00-\u9fff]", clean) and 3 <= len(clean) <= 40:
-        # 严格排除包含标点
-        if "，" in clean or "。" in clean or "：" in clean:
+    if re.match(r"^\d+\.\d+(?:\s|、|\.|\)|）).+", clean):
+        if len(clean) > 60:
             return None
-        
-        # 排除以代词或句子开头词开头
-        if re.match(r"^[它他她这那此其该首先其次然后最后]", clean):
+        return 2
+    if re.match(r"^\d+(?:\s|、|\.|\)|）).+", clean):
+        if len(clean) > 40:
             return None
-        
-        # 检查常见标题结尾词
-        title_endings = ["分析", "研究", "方法", "设计", "实验", "结果", "讨论", "结论", 
-                        "展望", "背景", "意义", "目的", "目标", "问题", "假设"]
-        for ending in title_endings:
-            if clean.endswith(ending):
-                return 3
-        
-        # 如果是2-6个中文词的短语
-        chinese_words = re.findall(r"[\u4e00-\u9fff]+", clean)
-        if 2 <= len(chinese_words) <= 6:
-            # 排除动词开头
-            verbs = ["是", "有", "在", "为", "可以", "能够", "会", "要", "应该"]
-            if not any(chinese_words[0].startswith(v) for v in verbs):
-                # 检查是否包含常见内容词
-                content_words = ["本文", "我们", "本章", "本研究", "本实验", "结果表明"]
-                if not any(word in clean for word in content_words):
-                    return 3
-    
-    return None
-    
+        if re.search(r"[，。；:：]", clean):
+            return None
+        if re.search(r"\b\d{4}\b", clean) and not re.search(r"(章|节|引言|结语|结果|讨论|摘要)", clean):
+            return None
+        heading_keywords = ["引言", "结语", "结论", "摘要", "讨论", "结果", "方法", "实验", "背景", "研究", "理论", "文献", "综述", "相关工作", "模型", "数据", "系统", "实现", "分析", "问题", "意义"]
+        if len(clean) > 16 and not any(keyword in clean for keyword in heading_keywords):
+            return None
+        return 1
+    if re.match(r"^[一二三四五六七八九十]+[、.].+", clean):
+        return 1
+    if re.match(r"^[（(][一二三四五六七八九十]+[)）].+", clean):
+        return 2
+    if re.match(r"^[（(]\d+[)）].+", clean):
+        return 2
     return None
 
 
@@ -444,293 +328,14 @@ def build_response(payload):
         doc_copy = {k: v for k, v in doc.items() if k != "full_text"}
         cleaned_docs.append(doc_copy)
 
-    # 增强分析：文档类型识别和个性化图表
-    document_type = "other"
-    recommended_charts = []
-    enhanced_charts = {}
-    
-    if documents:
-        first_doc = documents[0]
-        doc_text = first_doc["full_text"]
-        doc_keywords = first_doc["keywords"]
-        
-        # 检测文档类型
-        document_type = detect_document_type(doc_text)
-        
-        # 推荐图表
-        recommended_charts = recommend_charts(document_type, doc_text, doc_keywords)
-        
-        # 生成增强图表数据
-        enhanced_charts = generate_enhanced_charts(doc_text, document_type, doc_keywords)
-    
     return {
         "documents": cleaned_docs,
         "keyword_chart": keyword_chart,
         "conclusion_graph": conclusion_graph,
         "comparison": comparison,
         "conflicts": conflicts,
-        # 新增字段
-        "document_type": document_type,
-        "recommended_charts": recommended_charts,
-        "enhanced_charts": enhanced_charts,
     }
 
-def detect_document_type(text):
-    """检测文档类型：学术论文、商业报告、技术文档、新闻文章、法律文档、政府公文、其他"""
-    text_lower = text.lower()
-    
-    # 扩展关键词列表
-    # 学术论文特征
-    academic_keywords = [
-        "abstract", "introduction", "methodology", "methods", "results", "discussion", 
-        "conclusion", "references", "bibliography", "citation", "文献", "参考文献", 
-        "引用", "摘要", "引言", "方法", "实验", "结果", "讨论", "结论", "研究背景",
-        "研究目的", "研究意义", "理论基础", "文献综述", "模型构建", "数据分析",
-        "实证研究", "学术", "论文", "期刊", "会议", "学位论文"
-    ]
-    academic_count = sum(1 for keyword in academic_keywords if keyword in text_lower)
-    
-    # 商业报告特征
-    business_keywords = [
-        "市场", "营销", "销售", "财务", "利润", "收入", "增长", "战略", "竞争", 
-        "客户", "产品", "服务", "年度报告", "季度报告", "财务报表", "资产负债表",
-        "现金流量表", "利润表", "市场份额", "竞争对手", "市场分析", "商业计划",
-        "投资回报", "风险评估", "SWOT分析", "PEST分析", "商业模式", "价值链"
-    ]
-    business_count = sum(1 for keyword in business_keywords if keyword in text_lower)
-    
-    # 技术文档特征
-    tech_keywords = [
-        "api", "接口", "函数", "代码", "编程", "算法", "架构", "部署", "配置", 
-        "安装", "使用说明", "文档", "示例", "教程", "指南", "手册", "调试",
-        "错误", "异常", "测试", "单元测试", "集成测试", "版本", "更新", "升级",
-        "源码", "仓库", "git", "commit", "分支", "合并", "编译", "构建", "打包"
-    ]
-    tech_count = sum(1 for keyword in tech_keywords if keyword in text_lower)
-    
-    # 新闻文章特征
-    news_keywords = [
-        "报道", "记者", "新闻", "消息", "据悉", "表示", "指出", "近日", "昨天", 
-        "今天", "日前", "发布", "举行", "召开", "会议", "发布会", "透露", "称",
-        "据了解", "据介绍", "据报道", "据悉", "有消息称", "来源", "独家", "头条"
-    ]
-    news_count = sum(1 for keyword in news_keywords if keyword in text_lower)
-    
-    # 法律文档特征
-    legal_keywords = [
-        "合同", "协议", "条款", "甲方", "乙方", "权利", "义务", "责任", "违约",
-        "赔偿", "仲裁", "诉讼", "法院", "法律", "法规", "条例", "规定", "章程"
-    ]
-    legal_count = sum(1 for keyword in legal_keywords if keyword in text_lower)
-    
-    # 政府公文特征
-    gov_keywords = [
-        "通知", "公告", "通报", "决定", "意见", "办法", "规定", "条例", "细则",
-        "请示", "报告", "批复", "函", "纪要", "政府", "市委", "县委", "省委",
-        "国务院", "办公厅", "委员会", "办公室", "关于印发", "关于转发"
-    ]
-    gov_count = sum(1 for keyword in gov_keywords if keyword in text_lower)
-    
-    # 判断 - 使用加权分数
-    scores = {
-        "academic": academic_count * 1.5,  # 学术论文权重更高
-        "business": business_count,
-        "technical": tech_count,
-        "news": news_count,
-        "legal": legal_count,
-        "government": gov_count
-    }
-    
-    max_type = max(scores, key=scores.get)
-    max_score = scores[max_type]
-    
-    # 设置阈值
-    if max_score >= 3:
-        return max_type
-    elif max_score >= 2:
-        # 如果有明显的关键词，即使分数低也识别
-        return max_type
-    else:
-        # 尝试基于内容特征判断
-        if len(text) > 5000 and "参考文献" in text:
-            return "academic"
-        elif "财务报表" in text or "年度报告" in text:
-            return "business"
-        elif "代码" in text or "API" in text:
-            return "technical"
-        elif "报道" in text or "记者" in text:
-            return "news"
-        elif "合同" in text or "协议" in text:
-            return "legal"
-        elif "通知" in text or "公告" in text:
-            return "government"
-        else:
-            return "other"
-
-
-def recommend_charts(doc_type, text, keywords):
-    """根据文档类型推荐图表组合"""
-    base_charts = ["keyword_barchart", "conclusion_graph"]
-    
-    if doc_type == "academic":
-        return base_charts + ["section_structure", "reference_distribution"]
-    elif doc_type == "business":
-        return base_charts + ["timeline", "entity_relationship"]
-    elif doc_type == "technical":
-        return base_charts + ["code_distribution", "api_statistics"]
-    elif doc_type == "news":
-        return base_charts + ["named_entity", "sentiment_analysis"]
-    else:
-        return base_charts + ["wordcloud", "category_pie"]
-
-
-def generate_enhanced_charts(text, doc_type, keywords):
-    """生成增强图表数据"""
-    enhanced = {}
-    
-    # 词云数据 (基于关键词权重)
-    wordcloud_data = []
-    for kw in keywords[:15]:
-        wordcloud_data.append({
-            "text": kw["term"],
-            "value": kw["score"] * 1000
-        })
-    enhanced["wordcloud"] = wordcloud_data
-    
-        # 分类饼图数据 (基于内容分析)
-    pie_data = []
-    
-    # 根据文档类型和内容分析生成分类
-    if doc_type == "academic":
-        # 学术论文分类分析
-        categories = ["引言与背景", "方法与实验", "结果与发现", "讨论与分析", "结论与展望", "参考文献"]
-        # 基于关键词和章节标题估算比例
-        text_lower = text.lower()
-        intro_score = sum(1 for kw in ["引言", "背景", "introduction", "background"] if kw in text_lower)
-        method_score = sum(1 for kw in ["方法", "实验", "method", "experiment", "methodology"] if kw in text_lower)
-        result_score = sum(1 for kw in ["结果", "发现", "result", "finding"] if kw in text_lower)
-        discussion_score = sum(1 for kw in ["讨论", "分析", "discussion", "analysis"] if kw in text_lower)
-        conclusion_score = sum(1 for kw in ["结论", "总结", "conclusion", "summary"] if kw in text_lower)
-        reference_score = sum(1 for kw in ["参考文献", "引用", "reference", "bibliography"] if kw in text_lower)
-        
-        scores = [intro_score, method_score, result_score, discussion_score, conclusion_score, reference_score]
-        total = sum(scores) + 1  # 避免除零
-        
-        for i, cat in enumerate(categories):
-            # 基础值+关键词分数，确保每个分类都有值
-            base_value = 10 + (scores[i] * 15)
-            pie_data.append({
-                "name": cat,
-                "value": min(40, max(5, base_value))
-            })
-            
-    elif doc_type == "business":
-        # 商业报告分类
-        categories = ["市场分析", "财务数据", "战略规划", "竞争分析", "执行总结", "风险评估"]
-        # 基于关键词频率
-        for cat in categories:
-            # 简单估算：根据分类关键词在文本中出现的次数
-            cat_keywords = {
-                "市场分析": ["市场", "营销", "需求", "消费者", "客户"],
-                "财务数据": ["财务", "收入", "利润", "成本", "预算"],
-                "战略规划": ["战略", "规划", "目标", "愿景", "使命"],
-                "竞争分析": ["竞争", "对手", "优势", "劣势", "市场份额"],
-                "执行总结": ["执行", "实施", "计划", "时间表", "里程碑"],
-                "风险评估": ["风险", "评估", "威胁", "机会", "不确定性"]
-            }
-            score = sum(1 for kw in cat_keywords.get(cat, []) if kw in text)
-            value = 10 + score * 8
-            pie_data.append({
-                "name": cat,
-                "value": min(35, max(5, value))
-            })
-            
-    elif doc_type == "technical":
-        # 技术文档分类
-        categories = ["概述与安装", "API接口", "代码示例", "配置说明", "故障排除", "最佳实践"]
-        for cat in categories:
-            value = 15  # 基础值
-            pie_data.append({
-                "name": cat,
-                "value": value
-            })
-            
-    elif doc_type == "news":
-        # 新闻文章分类
-        categories = ["政治", "经济", "社会", "文化", "科技", "国际"]
-        for cat in categories:
-            value = 15  # 基础值
-            pie_data.append({
-                "name": cat,
-                "value": value
-            })
-            
-    else:
-        # 通用分类，基于内容段落分析
-        categories = ["核心内容", "背景信息", "数据分析", "结论总结", "其他信息"]
-        for i, cat in enumerate(categories):
-            pie_data.append({
-                "name": cat,
-                "value": 20 - i*3  # 递减权重
-            })
-    
-    # 确保总和接近100
-    total = sum(item["value"] for item in pie_data)
-    if total > 0:
-        for item in pie_data:
-            item["value"] = round(item["value"] * 100 / total)
-    
-    enhanced["pie"] = pie_data
-    
-    # 时间线数据 (如果检测到日期)
-    timeline_data = []
-    date_patterns = [
-        r"\d{4}年\d{1,2}月\d{1,2}日",
-        r"\d{4}-\d{1,2}-\d{1,2}",
-        r"\d{4}\.\d{1,2}\.\d{1,2}"
-    ]
-    for pattern in date_patterns:
-        dates = re.findall(pattern, text)
-        if dates:
-            for date in dates[:5]:
-                timeline_data.append({
-                    "date": date,
-                    "event": f"事件描述",
-                    "importance": random.randint(1, 10)
-                })
-            break
-    if not timeline_data:
-        # 生成模拟时间线
-        for i in range(3):
-            timeline_data.append({
-                "date": f"2025-{i+1}-01",
-                "event": f"关键事件 {i+1}",
-                "importance": random.randint(1, 10)
-            })
-    enhanced["timeline"] = timeline_data
-    
-    # 实体关系数据 (基于关键词共现)
-    entity_data = {
-        "nodes": [],
-        "links": []
-    }
-    for i, kw in enumerate(keywords[:8]):
-        entity_data["nodes"].append({
-            "id": kw["term"],
-            "group": i % 3 + 1
-        })
-    
-    for i in range(len(entity_data["nodes"])):
-        for j in range(i+1, len(entity_data["nodes"])):
-            if random.random() > 0.7:
-                entity_data["links"].append({
-                    "source": entity_data["nodes"][i]["id"],
-                    "target": entity_data["nodes"][j]["id"],
-                    "value": random.randint(1, 5)
-                })
-    enhanced["entity_network"] = entity_data
-    
-    return enhanced
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
