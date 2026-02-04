@@ -379,6 +379,127 @@ def detect_conflicts(documents):
     return conflicts
 
 
+def detect_document_type(text: str, keywords) -> str:
+    """检测文档类型"""
+    text_lower = text.lower()
+    if any(word in text_lower for word in ["论文", "研究", "学术", "期刊", "会议"]):
+        return "学术论文"
+    elif any(word in text_lower for word in ["报告", "分析", "市场", "行业"]):
+        return "行业报告"
+    elif any(word in text_lower for word in ["技术", "开发", "代码", "api", "接口"]):
+        return "技术文档"
+    elif any(word in text_lower for word in ["合同", "协议", "法律", "条款"]):
+        return "法律文书"
+    else:
+        return "通用文档"
+
+
+def generate_recommended_charts(doc_type: str) -> list[str]:
+    """根据文档类型推荐图表"""
+    chart_map = {
+        "学术论文": ["keyword_barchart", "conclusion_graph", "section_structure", "reference_distribution", "timeline"],
+        "行业报告": ["keyword_barchart", "category_pie", "timeline", "entity_relationship", "sentiment_analysis"],
+        "技术文档": ["code_distribution", "api_statistics", "section_structure", "entity_relationship", "named_entity"],
+        "法律文书": ["section_structure", "named_entity", "keyword_barchart", "timeline"],
+        "通用文档": ["keyword_barchart", "wordcloud", "category_pie", "section_structure"]
+    }
+    return chart_map.get(doc_type, ["keyword_barchart", "wordcloud", "category_pie"])
+
+
+def generate_enhanced_charts(keywords, text: str, doc_type: str):
+    """生成增强图表数据"""
+    # 词云数据：从关键词生成
+    wordcloud = []
+    for i, item in enumerate(keywords[:20]):  # 取前20个关键词
+        wordcloud.append({
+            "text": item["term"],
+            "value": int(item["score"] * 1000) + 10  # 转换为整数权重
+        })
+    
+    # 饼图数据：基于关键词分类或模拟分类
+    pie_categories = []
+    if doc_type == "学术论文":
+        pie_categories = ["研究背景", "方法设计", "实验结果", "讨论分析", "结论总结"]
+    elif doc_type == "行业报告":
+        pie_categories = ["市场分析", "竞争格局", "趋势预测", "风险提示", "建议措施"]
+    elif doc_type == "技术文档":
+        pie_categories = ["架构设计", "接口说明", "代码示例", "部署指南", "故障排除"]
+    else:
+        pie_categories = ["概述", "主体内容", "案例分析", "数据展示", "总结"]
+    
+    pie = []
+    base_value = 100 // len(pie_categories)
+    for i, category in enumerate(pie_categories):
+        pie.append({
+            "name": category,
+            "value": base_value + (i * 2)  # 简单分布
+        })
+    
+    # 时间线数据：尝试从文本提取日期，否则模拟
+    timeline = []
+    # 尝试匹配日期模式
+    date_patterns = [
+        r"\d{4}年\d{1,2}月\d{1,2}日",
+        r"\d{4}-\d{1,2}-\d{1,2}",
+        r"\d{4}/\d{1,2}/\d{1,2}",
+        r"\d{4}年\d{1,2}月",
+        r"\d{4}年"
+    ]
+    
+    found_dates = []
+    for pattern in date_patterns:
+        dates = re.findall(pattern, text)
+        found_dates.extend(dates)
+    
+    if found_dates:
+        # 使用实际找到的日期
+        unique_dates = list(set(found_dates))[:5]  # 最多5个
+        for i, date in enumerate(unique_dates):
+            timeline.append({
+                "date": date,
+                "event": f"文档中提到的关键时间点",
+                "importance": 3 + i  # 1-5的重要性
+            })
+    else:
+        # 模拟时间线
+        timeline = [
+            {"date": "2024-01", "event": "项目启动阶段", "importance": 3},
+            {"date": "2024-03", "event": "初步研究完成", "importance": 4},
+            {"date": "2024-06", "event": "核心成果发布", "importance": 5},
+            {"date": "2024-09", "event": "应用推广阶段", "importance": 3},
+            {"date": "2024-12", "event": "总结与展望", "importance": 4}
+        ]
+    
+    # 实体网络：从关键词关系生成简单网络
+    entity_network = {
+        "nodes": [],
+        "links": []
+    }
+    
+    # 节点：前10个关键词
+    top_keywords = keywords[:10]
+    for i, item in enumerate(top_keywords):
+        entity_network["nodes"].append({
+            "id": item["term"],
+            "group": i % 3 + 1  # 简单的分组
+        })
+    
+    # 链接：创建关键词之间的简单关系
+    for i in range(len(top_keywords) - 1):
+        entity_network["links"].append({
+            "source": top_keywords[i]["term"],
+            "target": top_keywords[i + 1]["term"],
+            "value": 1 + (i % 3)  # 1-3的权重
+        })
+    
+    return {
+        "wordcloud": wordcloud,
+        "pie": pie,
+        "timeline": timeline,
+        "entity_network": entity_network
+    }
+
+
 def build_response(payload):
     documents = []
     for file in payload.get("files", []):
@@ -444,12 +565,36 @@ def build_response(payload):
         doc_copy = {k: v for k, v in doc.items() if k != "full_text"}
         cleaned_docs.append(doc_copy)
 
+    # 生成增强图表数据
+    document_type = "通用文档"
+    recommended_charts = []
+    enhanced_charts_data = {
+        "wordcloud": [],
+        "pie": [],
+        "timeline": [],
+        "entity_network": {"nodes": [], "links": []}
+    }
+    
+    if documents:
+        # 使用第一个文档生成图表数据
+        first_doc = documents[0]
+        document_type = detect_document_type(first_doc["full_text"], first_doc["keywords"])
+        recommended_charts = generate_recommended_charts(document_type)
+        enhanced_charts_data = generate_enhanced_charts(
+            first_doc["keywords"], 
+            first_doc["full_text"], 
+            document_type
+        )
+
     return {
         "documents": cleaned_docs,
         "keyword_chart": keyword_chart,
         "conclusion_graph": conclusion_graph,
         "comparison": comparison,
         "conflicts": conflicts,
+        "document_type": document_type,
+        "recommended_charts": recommended_charts,
+        "enhanced_charts": enhanced_charts_data,
     }
 
 
