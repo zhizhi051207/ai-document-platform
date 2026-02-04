@@ -36,7 +36,7 @@ def extract_text(file_bytes: bytes, filename: str) -> str:
     if lower.endswith(".pdf"):
         # 过滤pdfplumber的常见警告
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", message="CropBox missing from /Page")
+            warnings.filterwarnings("ignore", message="CropBox missing from /Page.*")
             try:
                 with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
                     pages = []
