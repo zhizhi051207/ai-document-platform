@@ -22,6 +22,7 @@ import os
 import sys
 
 # OpenRouter API 配置
+# TODO: 请用户在Vercel中设置环境变量 OPENROUTER_API_KEY，然后移除下面的硬编码
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY") or "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"
 openai.api_key = OPENROUTER_API_KEY
 openai.base_url = "https://openrouter.ai/api/v1"
