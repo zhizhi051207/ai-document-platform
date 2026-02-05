@@ -22,12 +22,12 @@ import os
 import sys
 
 # OpenRouter API 配置
-OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY") or "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"
 openai.api_key = OPENROUTER_API_KEY
 openai.base_url = "https://openrouter.ai/api/v1"
 
 # AI模型配置
-AI_MODEL = "anthropic/claude-sonnet-4.5"
+AI_MODEL = "deepseek/deepseek-chat"
 
 def normalize_text(text: str) -> str:
     if not text:
