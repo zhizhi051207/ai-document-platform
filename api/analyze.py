@@ -540,6 +540,8 @@ def build_response(payload):
             for item in (ai_conclusions if ai_conclusions else extract_conclusions(text, sections_raw))
             if normalize_text(item)
         ]
+        # 检测是否使用了AI增强
+        ai_enhanced = bool(ai_summary or ai_keywords or ai_conclusions)
         documents.append({
             "name": file["name"],
             "word_count": len(text),
@@ -548,6 +550,7 @@ def build_response(payload):
             "keywords": keywords,
             "sections": sections,
             "full_text": text,
+            "ai_enhanced": ai_enhanced,
         })
 
     keyword_chart = []
