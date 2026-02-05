@@ -269,8 +269,9 @@ function App() {
                   <p className="text-xs">支持研究结论图、文献对比、观点冲突检测。</p>
                 </div>
               ) : (
-                <Tabs defaultValue="overview" className="space-y-4">
+                <Tabs defaultValue="ai-analysis" className="space-y-4">
                   <TabsList className="flex flex-wrap gap-2 bg-slate-950/70">
+                    <TabsTrigger value="ai-analysis">🤖 AI深度分析</TabsTrigger>
                     <TabsTrigger value="overview">总览</TabsTrigger>
                     <TabsTrigger value="summary">摘要</TabsTrigger>
                     <TabsTrigger value="conclusions">结论</TabsTrigger>
@@ -280,6 +281,126 @@ function App() {
                     <TabsTrigger value="comparison">文献对比</TabsTrigger>
                     <TabsTrigger value="conflict">观点冲突</TabsTrigger>
                   </TabsList>
+
+                  <TabsContent value="ai-analysis" className="space-y-6">
+                    <Card className="border-slate-800 bg-slate-950/40">
+                      <CardHeader>
+                        <CardTitle className="text-base">🤖 AI模型系统分析报告</CardTitle>
+                        <CardDescription>基于深度学习的文档理解与推理</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        {/* 文档类型识别 */}
+                        <div className="space-y-3">
+                          <h3 className="text-sm font-medium text-slate-200">📄 文档类型识别</h3>
+                          <div className="flex items-center gap-3">
+                            <Badge className="bg-indigo-500/20 text-indigo-200">{result.document_type}</Badge>
+                            <span className="text-sm text-slate-300">AI识别该文档为{result.document_type}类型</span>
+                          </div>
+                          <p className="text-xs text-slate-400">模型根据文档结构、术语使用和内容特征自动分类</p>
+                        </div>
+
+                        {/* 核心推理过程 */}
+                        <div className="space-y-3">
+                          <h3 className="text-sm font-medium text-slate-200">💭 AI推理过程</h3>
+                          <div className="space-y-4">
+                            {result.documents.map((doc, docIdx) => (
+                              <div key={docIdx} className="space-y-3">
+                                <p className="text-sm font-medium text-slate-100">{doc.name}</p>
+                                <div className="space-y-2">
+                                  {doc.sections.map((section, secIdx) => (
+                                    <Card key={secIdx} className="border-slate-800 bg-slate-900/60">
+                                      <CardHeader className="py-3">
+                                        <CardTitle className="text-sm">章节: {section.title}</CardTitle>
+                                      </CardHeader>
+                                      <CardContent className="py-3">
+                                        <p className="text-sm text-slate-300 mb-2">🤔 AI思考链:</p>
+                                        <p className="text-sm text-slate-300 bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                          {section.thinking || "暂无思考过程记录"}
+                                        </p>
+                                      </CardContent>
+                                    </Card>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* 智能图表推荐 */}
+                        <div className="space-y-3">
+                          <h3 className="text-sm font-medium text-slate-200">📊 智能图表推荐</h3>
+                          <div className="flex flex-wrap gap-2">
+                            {result.recommended_charts.map((chart, idx) => (
+                              <Badge key={idx} variant="outline" className="text-xs">
+                                {chart}
+                              </Badge>
+                            ))}
+                          </div>
+                          <p className="text-xs text-slate-400">AI根据文档内容推荐最相关的可视化图表类型</p>
+                        </div>
+
+                        {/* 增强分析能力 */}
+                        <div className="space-y-3">
+                          <h3 className="text-sm font-medium text-slate-200">🚀 增强分析能力</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Card className="border-slate-800 bg-slate-900/60">
+                              <CardHeader className="py-3">
+                                <CardTitle className="text-sm">关键词提取</CardTitle>
+                              </CardHeader>
+                              <CardContent className="py-3">
+                                <p className="text-sm text-slate-300">
+                                  AI提取了{result.keyword_chart.length}个核心关键词，并进行重要性排序
+                                </p>
+                              </CardContent>
+                            </Card>
+                            <Card className="border-slate-800 bg-slate-900/60">
+                              <CardHeader className="py-3">
+                                <CardTitle className="text-sm">章节分析</CardTitle>
+                              </CardHeader>
+                              <CardContent className="py-3">
+                                <p className="text-sm text-slate-300">
+                                  识别出{result.documents.reduce((sum, doc) => sum + doc.sections.length, 0)}个逻辑章节，并生成摘要
+                                </p>
+                              </CardContent>
+                            </Card>
+                            <Card className="border-slate-800 bg-slate-900/60">
+                              <CardHeader className="py-3">
+                                <CardTitle className="text-sm">结论推理</CardTitle>
+                              </CardHeader>
+                              <CardContent className="py-3">
+                                <p className="text-sm text-slate-300">
+                                  推导出{result.documents.reduce((sum, doc) => sum + doc.conclusions.length, 0)}条核心结论
+                                </p>
+                              </CardContent>
+                            </Card>
+                            <Card className="border-slate-800 bg-slate-900/60">
+                              <CardHeader className="py-3">
+                                <CardTitle className="text-sm">关系网络</CardTitle>
+                              </CardHeader>
+                              <CardContent className="py-3">
+                                <p className="text-sm text-slate-300">
+                                  构建了包含{result.enhanced_charts.entity_network.nodes.length}个实体的关系网络
+                                </p>
+                              </CardContent>
+                            </Card>
+                          </div>
+                        </div>
+
+                        {/* 分析总结 */}
+                        <div className="space-y-3">
+                          <h3 className="text-sm font-medium text-slate-200">🎯 AI分析总结</h3>
+                          <Card className="border-slate-800 bg-slate-900/60">
+                            <CardContent className="py-4">
+                              <p className="text-sm text-slate-300">
+                                本次分析使用深度学习模型，对文档进行了系统性理解。AI不仅提取了表层信息，还通过推理链理解文档的深层逻辑关系，
+                                识别关键实体及其关联，并为用户推荐最合适的可视化方式。整个分析过程体现了模型对文档的全面认知能力。
+                              </p>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
 
                   <TabsContent value="overview" className="space-y-4">
                     <div className="grid gap-4 md:grid-cols-2">
