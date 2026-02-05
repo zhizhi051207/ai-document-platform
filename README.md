@@ -30,6 +30,7 @@
 3. 点击 **Settings → Environment Variables**
 4. 添加以下环境变量：
    - `OPENROUTER_API_KEY`: 你的OpenRouter API密钥（从 [OpenRouter](https://openrouter.ai/) 获取）
+   - **注意：** 如果API密钥无效，AI分析功能将自动回退到传统算法，但体验会打折扣。请确保使用有效的API密钥。
 
 #### 2. 部署项目
 
