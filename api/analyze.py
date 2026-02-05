@@ -89,7 +89,7 @@ def ai_summarize(text: str, max_sentences: int = 3) -> str:
             ],
             max_tokens=500,
             temperature=0.3,
-            timeout=10
+            timeout=30
         )
         return response.choices[0].message.content.strip()
     except Exception:
@@ -109,7 +109,7 @@ def ai_extract_keywords(text: str, top_k: int = 8) -> list:
             ],
             max_tokens=300,
             temperature=0.2,
-            timeout=10
+            timeout=30
         )
         content = response.choices[0].message.content.strip()
         keywords = [line.strip() for line in content.split('\n') if line.strip()]
@@ -133,7 +133,7 @@ def ai_extract_conclusions(text: str, sections: list) -> list:
             ],
             max_tokens=400,
             temperature=0.3,
-            timeout=10
+            timeout=30
         )
         content = response.choices[0].message.content.strip()
         conclusions = [line.strip() for line in content.split('\n') if line.strip()]
